@@ -282,17 +282,17 @@
                 <!-- 可保持開啟/關閉的八度切換群組 -->
                 <div class="flex items-center gap-1" role="group" aria-label="八度鎖定切換">
                     <button id="octHighBtn" onclick="toggleStickyOctave(1)" class="px-2 h-6 rounded border text-xs font-medium transition" title="開啟/關閉高八度鎖定 (快捷鍵: Q)">高八度 •</button>
-                    <button id="octMidBtn" onclick="setStickyOctave(0)" class="px-2 h-6 rounded border text-xs font-medium transition" title="切換為中音 (快捷鍵: W)">中音</button>
-                    <button id="octLowBtn" onclick="toggleStickyOctave(-1)" class="px-2 h-6 rounded border text-xs font-medium transition" title="開啟/關閉低八度鎖定 (快捷鍵: A)">低八度 •</button>
+                    <button id="octMidBtn" onclick="setStickyOctave(0)" class="px-2 h-6 rounded border text-xs font-medium transition" title="切換為中音 (快捷鍵: A)">中音</button>
+                    <button id="octLowBtn" onclick="toggleStickyOctave(-1)" class="px-2 h-6 rounded border text-xs font-medium transition" title="開啟/關閉低八度鎖定 (快捷鍵: Z)">低八度 •</button>
                 </div>
 
                 <div class="h-4 w-px bg-slate-300 mx-0.5"></div>
 
                 <!-- 可保持開啟/關閉的升降還原記號群組 -->
                 <div class="flex items-center gap-1" role="group" aria-label="升降還原鎖定切換">
-                    <button id="accSharpBtn" onclick="toggleStickyAccidental('♯')" class="px-1.5 h-6 rounded border font-semibold text-xs transition" title="開啟/關閉升記號鎖定 (快捷鍵: #)">♯ 升</button>
-                    <button id="accFlatBtn" onclick="toggleStickyAccidental('♭')" class="px-1.5 h-6 rounded border font-semibold text-xs transition" title="開啟/關閉降記號鎖定 (快捷鍵: b)">♭ 降</button>
-                    <button id="accNaturalBtn" onclick="toggleStickyAccidental('♮')" class="px-1.5 h-6 rounded border font-semibold text-xs transition" title="開啟/關閉還原記號鎖定 (快捷鍵: n)">♮ 還原</button>
+                    <button id="accSharpBtn" onclick="toggleStickyAccidental('♯')" class="px-1.5 h-6 rounded border font-semibold text-xs transition" title="開啟/關閉升記號鎖定 (快捷鍵: S)">♯ 升</button>
+                    <button id="accFlatBtn" onclick="toggleStickyAccidental('♭')" class="px-1.5 h-6 rounded border font-semibold text-xs transition" title="開啟/關閉降記號鎖定 (快捷鍵: F)">♭ 降</button>
+                    <button id="accNaturalBtn" onclick="toggleStickyAccidental('♮')" class="px-1.5 h-6 rounded border font-semibold text-xs transition" title="開啟/關閉還原記號鎖定 (快捷鍵: N)">♮ 還原</button>
                     <button id="accClearBtn" onclick="clearStickyAccidental()" class="px-1.5 h-6 rounded bg-white hover:bg-slate-200 border border-slate-300 text-xs text-slate-600 transition" title="關閉記號鎖定並清除目前音符記號">清除記號</button>
                 </div>
 
@@ -341,7 +341,7 @@
         </div>
         <div class="flex items-center gap-3 shrink-0">
             <span class="hidden lg:inline text-slate-400">
-                快捷鍵：音符 <kbd class="px-1 bg-slate-100 border rounded text-slate-600">1-7/0/-</kbd> ・ 八度鎖定 <kbd class="px-1 bg-slate-100 border rounded text-slate-600">Q/W/A</kbd> ・ 記號鎖定 <kbd class="px-1 bg-slate-100 border rounded text-slate-600">#/b/n</kbd> ・ 復原 <kbd class="px-1 bg-slate-100 border rounded text-slate-600">Ctrl+Z/Y</kbd>
+                快捷鍵：音符 <kbd class="px-1 bg-slate-100 border rounded text-slate-600">1-7/0/-</kbd> ・ 八度鎖定 <kbd class="px-1 bg-slate-100 border rounded text-slate-600">Q/A/Z</kbd> ・ 記號鎖定 <kbd class="px-1 bg-slate-100 border rounded text-slate-600">S/F/N</kbd> ・ 復原 <kbd class="px-1 bg-slate-100 border rounded text-slate-600">Ctrl+Z/Y</kbd>
             </span>
             <button id="autoMoveIndicator" class="cursor-pointer hover:text-blue-600 select-none font-medium text-slate-600" onclick="toggleAutoAdvance()">
                 ☑ 自動跳下一字
@@ -1562,30 +1562,30 @@
                     return;
                 }
 
-                // 八度鎖定切換 Q / W / A
+                // 八度鎖定切換 Q (高八度) / A (中音) / Z (低八度)
                 if (e.key === 'q' || e.key === 'Q') {
                     e.preventDefault();
                     toggleStickyOctave(1);
                     return;
                 }
-                if (e.key === 'w' || e.key === 'W') {
+                if (e.key === 'a' || e.key === 'A') {
                     e.preventDefault();
                     setStickyOctave(0);
                     return;
                 }
-                if (e.key === 'a' || e.key === 'A') {
+                if (e.key === 'z' || e.key === 'Z') {
                     e.preventDefault();
                     toggleStickyOctave(-1);
                     return;
                 }
 
-                // 升降還原記號鎖定切換 # / b / n
-                if (e.key === '#') {
+                // 升降還原記號鎖定切換 S (升) / F (降) / N (還原)，並保留 # 支援升記號
+                if (e.key === 's' || e.key === 'S' || e.key === '#') {
                     e.preventDefault();
                     toggleStickyAccidental('♯');
                     return;
                 }
-                if (e.key === 'b' || e.key === 'B') {
+                if (e.key === 'f' || e.key === 'F') {
                     e.preventDefault();
                     toggleStickyAccidental('♭');
                     return;
