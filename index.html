@@ -93,13 +93,14 @@
             background-color: #1d4ed8;
         }
 
-        /* 1. 高八度點列 (7px) */
+        /* 1. 高八度點列 (9px，支援單點與上下垂直雙點) */
         .octave-top {
-            height: calc(7px * var(--row-scale));
+            height: calc(9px * var(--row-scale));
             display: flex;
-            align-items: flex-end;
-            justify-content: center;
-            gap: 1.5px;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 1px;
             line-height: 1;
         }
 
@@ -133,22 +134,24 @@
             display: inline-block;
         }
 
-        /* 3. 低八度點列 (7px) */
+        /* 3. 低八度點列 (9px，支援單點與上下垂直雙點) */
         .octave-bottom {
-            height: calc(7px * var(--row-scale));
+            height: calc(9px * var(--row-scale));
             display: flex;
-            align-items: flex-start;
-            justify-content: center;
-            gap: 1.5px;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 1px;
             line-height: 1;
         }
 
         .octave-dot {
-            width: 3.5px;
-            height: 3.5px;
+            width: 3.2px;
+            height: 3.2px;
             background-color: #0f172a;
             border-radius: 9999px;
             display: inline-block;
+            flex-shrink: 0;
         }
 
         /* 4. 歌詞字元列 (21px) */
@@ -222,75 +225,105 @@
         </div>
     </header>
 
-    <!-- ==================== 2. 固定簡譜編輯工具列 (單一緊湊列，含上/下一步與可鎖定記號按鈕) ==================== -->
-    <div class="bg-slate-50 border-b border-slate-200 px-3 h-[42px] max-h-[44px] flex items-center justify-between gap-2 z-10 shrink-0 overflow-x-auto no-scrollbar whitespace-nowrap">
-        <div class="flex items-center gap-1 shrink-0">
-            <!-- 上一步 / 下一步 -->
-            <button id="undoBtn" onclick="undoAction()" disabled class="px-2 h-6 rounded bg-white hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none border border-slate-300 text-slate-700 text-xs font-medium transition" title="復原上一步 (Ctrl+Z / Cmd+Z)">↩ 上一步</button>
-            <button id="redoBtn" onclick="redoAction()" disabled class="px-2 h-6 rounded bg-white hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none border border-slate-300 text-slate-700 text-xs font-medium transition" title="重做下一步 (Ctrl+Y / Ctrl+Shift+Z)">↪ 下一步</button>
+    <!-- ==================== 2. 固定簡譜編輯工具列 (雙排緊湊配置，避免水平超出截斷) ==================== -->
+    <div class="bg-slate-50 border-b border-slate-200 px-3 py-1.5 flex flex-col gap-1.5 z-10 shrink-0">
+        <!-- 第一排：復原重做、輸入模式、簡譜音符按鈕 + 右側畫布顯示設定 -->
+        <div class="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar whitespace-nowrap">
+            <div class="flex items-center gap-1 shrink-0">
+                <!-- 上一步 / 下一步 -->
+                <button id="undoBtn" onclick="undoAction()" disabled class="px-2 h-6 rounded bg-white hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none border border-slate-300 text-slate-700 text-xs font-medium transition" title="復原上一步 (Ctrl+Z / Cmd+Z)">↩ 上一步</button>
+                <button id="redoBtn" onclick="redoAction()" disabled class="px-2 h-6 rounded bg-white hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none border border-slate-300 text-slate-700 text-xs font-medium transition" title="重做下一步 (Ctrl+Y / Ctrl+Shift+Z)">↪ 下一步</button>
 
-            <div class="h-4 w-px bg-slate-300 mx-0.5"></div>
+                <div class="h-4 w-px bg-slate-300 mx-0.5"></div>
 
-            <!-- 模式切換 -->
-            <div class="flex items-center bg-slate-200/80 p-0.5 rounded-md border border-slate-300/70">
-                <button id="modeOverwriteBtn" onclick="setInputMode('overwrite')" class="px-2 py-0.5 text-xs font-semibold rounded bg-white text-blue-600 shadow-2xs transition">
-                    單音覆蓋
-                </button>
-                <button id="modeAppendBtn" onclick="setInputMode('append')" class="px-2 py-0.5 text-xs font-semibold rounded text-slate-600 hover:text-slate-900 transition">
-                    多音連加 (+音)
-                </button>
+                <!-- 模式切換 -->
+                <div class="flex items-center bg-slate-200/80 p-0.5 rounded-md border border-slate-300/70">
+                    <button id="modeOverwriteBtn" onclick="setInputMode('overwrite')" class="px-2 py-0.5 text-xs font-semibold rounded bg-white text-blue-600 shadow-2xs transition">
+                        單音覆蓋
+                    </button>
+                    <button id="modeAppendBtn" onclick="setInputMode('append')" class="px-2 py-0.5 text-xs font-semibold rounded text-slate-600 hover:text-slate-900 transition">
+                        多音連加 (+音)
+                    </button>
+                </div>
+
+                <div class="h-4 w-px bg-slate-300 mx-0.5"></div>
+
+                <!-- 簡譜數字快速鍵 + 新增同字音符 + 刪除 -->
+                <button onclick="inputNoteDigit('1')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">1</button>
+                <button onclick="inputNoteDigit('2')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">2</button>
+                <button onclick="inputNoteDigit('3')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">3</button>
+                <button onclick="inputNoteDigit('4')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">4</button>
+                <button onclick="inputNoteDigit('5')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">5</button>
+                <button onclick="inputNoteDigit('6')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">6</button>
+                <button onclick="inputNoteDigit('7')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">7</button>
+                <button onclick="inputNoteDigit('0')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition" title="休止符 0">0</button>
+                <button onclick="inputNoteDigit('-')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition" title="延音線 -">-</button>
+                <button onclick="addExtraNoteSlot()" class="px-1.5 h-6 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-semibold transition" title="為目前歌詞新增同字音符 (+)">+音</button>
+                <button onclick="clearSelectedNote()" class="px-2 h-6 rounded bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs text-rose-600 font-semibold transition" title="刪除目前音符 (Backspace / Delete)">刪除</button>
             </div>
 
-            <div class="h-4 w-px bg-slate-300 mx-0.5"></div>
-
-            <!-- 簡譜數字快速鍵 + 新增同字音符 + 刪除 -->
-            <button onclick="inputNoteDigit('1')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">1</button>
-            <button onclick="inputNoteDigit('2')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">2</button>
-            <button onclick="inputNoteDigit('3')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">3</button>
-            <button onclick="inputNoteDigit('4')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">4</button>
-            <button onclick="inputNoteDigit('5')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">5</button>
-            <button onclick="inputNoteDigit('6')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">6</button>
-            <button onclick="inputNoteDigit('7')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">7</button>
-            <button onclick="inputNoteDigit('0')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition" title="休止符 0">0</button>
-            <button onclick="inputNoteDigit('-')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition" title="延音線 -">-</button>
-            <button onclick="addExtraNoteSlot()" class="px-1.5 h-6 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-semibold transition" title="為目前歌詞新增同字音符 (+)">+音</button>
-            <button onclick="clearSelectedNote()" class="px-2 h-6 rounded bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs text-rose-600 font-semibold transition" title="刪除目前音符 (Backspace / Delete)">刪除</button>
-
-            <div class="h-4 w-px bg-slate-300 mx-0.5"></div>
-
-            <!-- 可保持開啟/關閉的八度切換群組 -->
-            <div class="flex items-center gap-1" role="group" aria-label="八度鎖定切換">
-                <button id="octHighBtn" onclick="toggleStickyOctave(1)" class="px-2 h-6 rounded border text-xs font-medium transition" title="開啟/關閉高八度鎖定 (快捷鍵: Q)">高八度 •</button>
-                <button id="octMidBtn" onclick="setStickyOctave(0)" class="px-2 h-6 rounded border text-xs font-medium transition" title="切換為中音 (快捷鍵: W)">中音</button>
-                <button id="octLowBtn" onclick="toggleStickyOctave(-1)" class="px-2 h-6 rounded border text-xs font-medium transition" title="開啟/關閉低八度鎖定 (快捷鍵: A)">低八度 •</button>
+            <!-- 右側顯示與圖片底色設定 -->
+            <div class="flex items-center gap-2.5 shrink-0 text-xs text-slate-600">
+                <label class="flex items-center gap-1 cursor-pointer select-none" title="勾選後，複製或下載的 PNG 圖片為透明背景">
+                    <input type="checkbox" id="transparentBgCheckbox" checked class="accent-emerald-600 rounded cursor-pointer">
+                    <span class="font-medium text-slate-700">透明圖底</span>
+                </label>
+                <div class="flex items-center gap-1" title="調整歌詞與簡譜顯示字級 (16px–28px)">
+                    <span>字級</span>
+                    <input type="range" id="fontSizeSlider" min="16" max="28" value="20" oninput="updateFontSize()" class="w-16 accent-blue-600 cursor-pointer">
+                    <span id="fontSizeLabel" class="font-mono w-8 text-slate-700 font-medium">20px</span>
+                </div>
             </div>
-
-            <div class="h-4 w-px bg-slate-300 mx-0.5"></div>
-
-            <!-- 可保持開啟/關閉的升降還原記號群組 -->
-            <div class="flex items-center gap-1" role="group" aria-label="升降還原鎖定切換">
-                <button id="accSharpBtn" onclick="toggleStickyAccidental('♯')" class="px-1.5 h-6 rounded border font-semibold text-xs transition" title="開啟/關閉升記號鎖定 (快捷鍵: #)">♯ 升</button>
-                <button id="accFlatBtn" onclick="toggleStickyAccidental('♭')" class="px-1.5 h-6 rounded border font-semibold text-xs transition" title="開啟/關閉降記號鎖定 (快捷鍵: b)">♭ 降</button>
-                <button id="accNaturalBtn" onclick="toggleStickyAccidental('♮')" class="px-1.5 h-6 rounded border font-semibold text-xs transition" title="開啟/關閉還原記號鎖定 (快捷鍵: n)">♮ 還原</button>
-                <button id="accClearBtn" onclick="clearStickyAccidental()" class="px-1.5 h-6 rounded bg-white hover:bg-slate-200 border border-slate-300 text-xs text-slate-600 transition" title="關閉記號鎖定並清除目前音符記號">清除記號</button>
-            </div>
-
-            <!-- 即時預設記號狀態指示標籤 -->
-            <span id="stickyModifierPill" class="ml-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-200/80 text-slate-600 border border-slate-300/70">
-                預設記號：中音
-            </span>
         </div>
 
-        <!-- 右側顯示與匯出設定 -->
-        <div class="flex items-center gap-2.5 shrink-0 text-xs text-slate-600">
-            <label class="flex items-center gap-1 cursor-pointer select-none" title="勾選後，複製或下載的 PNG 圖片為透明背景">
-                <input type="checkbox" id="transparentBgCheckbox" checked class="accent-emerald-600 rounded cursor-pointer">
-                <span class="font-medium text-slate-700">透明圖底</span>
-            </label>
-            <div class="flex items-center gap-1" title="調整歌詞與簡譜顯示字級 (16px–28px)">
-                <span>字級</span>
-                <input type="range" id="fontSizeSlider" min="16" max="28" value="20" oninput="updateFontSize()" class="w-16 accent-blue-600 cursor-pointer">
-                <span id="fontSizeLabel" class="font-mono w-8 text-slate-700 font-medium">20px</span>
+        <!-- 第二排：高低八度與升降還原記號鎖定 + 全曲半音移調 (-7 ~ +7) -->
+        <div class="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar whitespace-nowrap">
+            <div class="flex items-center gap-1 shrink-0">
+                <!-- 可保持開啟/關閉的八度切換群組 -->
+                <div class="flex items-center gap-1" role="group" aria-label="八度鎖定切換">
+                    <button id="octHighBtn" onclick="toggleStickyOctave(1)" class="px-2 h-6 rounded border text-xs font-medium transition" title="開啟/關閉高八度鎖定 (快捷鍵: Q)">高八度 •</button>
+                    <button id="octMidBtn" onclick="setStickyOctave(0)" class="px-2 h-6 rounded border text-xs font-medium transition" title="切換為中音 (快捷鍵: W)">中音</button>
+                    <button id="octLowBtn" onclick="toggleStickyOctave(-1)" class="px-2 h-6 rounded border text-xs font-medium transition" title="開啟/關閉低八度鎖定 (快捷鍵: A)">低八度 •</button>
+                </div>
+
+                <div class="h-4 w-px bg-slate-300 mx-0.5"></div>
+
+                <!-- 可保持開啟/關閉的升降還原記號群組 -->
+                <div class="flex items-center gap-1" role="group" aria-label="升降還原鎖定切換">
+                    <button id="accSharpBtn" onclick="toggleStickyAccidental('♯')" class="px-1.5 h-6 rounded border font-semibold text-xs transition" title="開啟/關閉升記號鎖定 (快捷鍵: #)">♯ 升</button>
+                    <button id="accFlatBtn" onclick="toggleStickyAccidental('♭')" class="px-1.5 h-6 rounded border font-semibold text-xs transition" title="開啟/關閉降記號鎖定 (快捷鍵: b)">♭ 降</button>
+                    <button id="accNaturalBtn" onclick="toggleStickyAccidental('♮')" class="px-1.5 h-6 rounded border font-semibold text-xs transition" title="開啟/關閉還原記號鎖定 (快捷鍵: n)">♮ 還原</button>
+                    <button id="accClearBtn" onclick="clearStickyAccidental()" class="px-1.5 h-6 rounded bg-white hover:bg-slate-200 border border-slate-300 text-xs text-slate-600 transition" title="關閉記號鎖定並清除目前音符記號">清除記號</button>
+                </div>
+
+                <!-- 即時預設記號狀態指示標籤 -->
+                <span id="stickyModifierPill" class="ml-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-200/80 text-slate-600 border border-slate-300/70">
+                    預設記號：中音
+                </span>
+            </div>
+
+            <!-- 全曲半音移調控制群組 (-7 ~ +7 半音) -->
+            <div class="flex items-center gap-1 shrink-0" role="group" aria-label="全曲半音移調">
+                <button onclick="transposeSong(-1)" class="px-1.5 h-6 rounded bg-white hover:bg-amber-50 hover:text-amber-700 hover:border-amber-400 border border-slate-300 text-slate-700 text-xs font-bold transition" title="整首歌曲降半音 (-1)">-1</button>
+                <select id="transposeSelect" onchange="handleTransposeSelect(this)" class="h-6 px-1.5 rounded bg-white hover:border-amber-400 border border-slate-300 text-slate-700 text-xs font-semibold cursor-pointer outline-none focus:border-amber-500" title="選擇半音移調格數 (-7 ~ +7)，立即套用至整首歌曲">
+                    <option value="0" selected>全曲移調 (±7)</option>
+                    <option value="7">+7 (完全五度)</option>
+                    <option value="6">+6 (增四度)</option>
+                    <option value="5">+5 (完全四度)</option>
+                    <option value="4">+4 (大三度)</option>
+                    <option value="3">+3 (小三度)</option>
+                    <option value="2">+2 (升全音)</option>
+                    <option value="1">+1 (升半音)</option>
+                    <option value="-1">-1 (降半音)</option>
+                    <option value="-2">-2 (降全音)</option>
+                    <option value="-3">-3 (降小三度)</option>
+                    <option value="-4">-4 (降大三度)</option>
+                    <option value="-5">-5 (降完全四度)</option>
+                    <option value="-6">-6 (降增四度)</option>
+                    <option value="-7">-7 (降完全五度)</option>
+                </select>
+                <button onclick="transposeSong(1)" class="px-1.5 h-6 rounded bg-white hover:bg-amber-50 hover:text-amber-700 hover:border-amber-400 border border-slate-300 text-slate-700 text-xs font-bold transition" title="整首歌曲升半音 (+1)">+1</button>
+                <button id="transposePrefBtn" onclick="toggleTransposeAccidentalPref()" class="px-1.5 h-6 rounded bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-800 text-xs font-semibold transition" title="切換移調遇到黑鍵音時，優先顯示 ♯ (升記號) 或 ♭ (降記號)">♯優先</button>
             </div>
         </div>
     </div>
@@ -393,6 +426,9 @@
         // 可保持開啟/關閉的八度與升降還原鎖定狀態
         let activeOctave = 0;       // 0 (中音), 1 (高八度 •), -1 (低八度 •)
         let activeAccidental = '';  // '' (無), '♯', '♭', '♮'
+
+        // 全曲半音移調黑鍵記號偏好 (true: 優先顯示 ♯，false: 優先顯示 ♭)
+        let transposePreferSharp = true;
 
         // 上一步 / 下一步歷史堆疊
         let undoStack = [];
@@ -1093,13 +1129,124 @@
 
             const lyricDisplay = tok.isSpace ? '（空白間隔）' : `「${escapeHtml(tok.lyric)}」`;
             const noteSummary = (tok.notes && tok.notes.length > 0)
-                ? tok.notes.map(n => `${n.accidental || ''}${n.pitch}${n.octave === 1 ? '˙' : n.octave === -1 ? '.' : ''}`).join(' ')
+                ? tok.notes.map(n => {
+                    const octMark = n.octave >= 2 ? '˙˙' : n.octave === 1 ? '˙' : n.octave <= -2 ? '..' : n.octave === -1 ? '.' : '';
+                    return `${n.accidental || ''}${n.pitch}${octMark}`;
+                }).join(' ')
                 : '尚未標註簡譜';
 
             statusEl.innerHTML = `
                 <span class="inline-block w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
                 <span>目前位置：P.${selectedPos.pageIdx + 1} 第 ${selectedPos.lineIdx + 1} 行 第 ${selectedPos.tokenIdx + 1} 字 ${lyricDisplay} ・ 簡譜：<strong class="text-slate-700">${escapeHtml(noteSummary)}</strong></span>
             `;
+        }
+
+        // =========================================================================
+        // 全曲半音移調引擎 (-7 ~ +7 半音，自動換算倍高/倍低八度點並支援復原)
+        // =========================================================================
+        const PITCH_TO_SEMITONE = { '1': 0, '2': 2, '3': 4, '4': 5, '5': 7, '6': 9, '7': 11 };
+        const SEMITONE_MAP_SHARP = [
+            { pitch: '1', accidental: '' },
+            { pitch: '1', accidental: '♯' },
+            { pitch: '2', accidental: '' },
+            { pitch: '2', accidental: '♯' },
+            { pitch: '3', accidental: '' },
+            { pitch: '4', accidental: '' },
+            { pitch: '4', accidental: '♯' },
+            { pitch: '5', accidental: '' },
+            { pitch: '5', accidental: '♯' },
+            { pitch: '6', accidental: '' },
+            { pitch: '6', accidental: '♯' },
+            { pitch: '7', accidental: '' }
+        ];
+        const SEMITONE_MAP_FLAT = [
+            { pitch: '1', accidental: '' },
+            { pitch: '2', accidental: '♭' },
+            { pitch: '2', accidental: '' },
+            { pitch: '3', accidental: '♭' },
+            { pitch: '3', accidental: '' },
+            { pitch: '4', accidental: '' },
+            { pitch: '5', accidental: '♭' },
+            { pitch: '5', accidental: '' },
+            { pitch: '6', accidental: '♭' },
+            { pitch: '6', accidental: '' },
+            { pitch: '7', accidental: '♭' },
+            { pitch: '7', accidental: '' }
+        ];
+
+        function toggleTransposeAccidentalPref() {
+            transposePreferSharp = !transposePreferSharp;
+            const btn = document.getElementById('transposePrefBtn');
+            if (btn) {
+                btn.textContent = transposePreferSharp ? '♯優先' : '♭優先';
+            }
+            showToast(transposePreferSharp ? '移調黑鍵記號已切換為「♯ 升記號優先」' : '移調黑鍵記號已切換為「♭ 降記號優先」', 1800);
+        }
+
+        function handleTransposeSelect(selectEl) {
+            const delta = parseInt(selectEl.value, 10);
+            selectEl.value = '0';
+            if (!isNaN(delta) && delta !== 0) {
+                transposeSong(delta);
+            }
+        }
+
+        function transposeSingleNote(note, semitoneDelta, preferSharp) {
+            if (!note || !(note.pitch in PITCH_TO_SEMITONE)) {
+                return { ...note };
+            }
+            const baseSemi = PITCH_TO_SEMITONE[note.pitch];
+            const accOffset = note.accidental === '♯' ? 1 : (note.accidental === '♭' ? -1 : 0);
+            const currentOctave = Number(note.octave) || 0;
+
+            const totalSemitones = currentOctave * 12 + baseSemi + accOffset + semitoneDelta;
+            const newOctave = Math.floor(totalSemitones / 12);
+            const semitoneInOctave = ((totalSemitones % 12) + 12) % 12;
+
+            const mapped = preferSharp ? SEMITONE_MAP_SHARP[semitoneInOctave] : SEMITONE_MAP_FLAT[semitoneInOctave];
+            return {
+                pitch: mapped.pitch,
+                octave: newOctave,
+                accidental: mapped.accidental
+            };
+        }
+
+        function transposeSong(semitoneDelta) {
+            if (!semitoneDelta || semitoneDelta < -7 || semitoneDelta > 7) return;
+            const song = getActiveSong();
+            if (!song) return;
+
+            let tunableNoteCount = 0;
+            song.pages.forEach(page => {
+                page.lines.forEach(line => {
+                    line.forEach(tok => {
+                        (tok.notes || []).forEach(n => {
+                            if (n.pitch in PITCH_TO_SEMITONE) tunableNoteCount++;
+                        });
+                    });
+                });
+            });
+
+            if (tunableNoteCount === 0) {
+                showToast('⚠️ 目前歌曲尚未標註簡譜音符（1~7），無需移調', 2200);
+                return;
+            }
+
+            pushUndoSnapshot();
+            song.pages.forEach(page => {
+                page.lines.forEach(line => {
+                    line.forEach(tok => {
+                        if (Array.isArray(tok.notes) && tok.notes.length > 0) {
+                            tok.notes = tok.notes.map(n => transposeSingleNote(n, semitoneDelta, transposePreferSharp));
+                        }
+                    });
+                });
+            });
+
+            renderAll();
+            const signLabel = semitoneDelta > 0 ? `+${semitoneDelta}` : `${semitoneDelta}`;
+            const prefLabel = transposePreferSharp ? '♯優先' : '♭優先';
+            showToast(`🎼 已將整首「${song.title}」移調 ${signLabel} 半音（${prefLabel}，可按「上一步」復原）`, 2600);
         }
 
         function setInputMode(mode) {
@@ -1520,7 +1667,7 @@
                     if (lineCount === 0) return;
 
                     // 計算原始垂直總高度，若超過 5.0 吋則等比例微縮
-                    const baseRowH = [0.13, 0.28, 0.13, 0.44]; // 單行總高 = 0.98"
+                    const baseRowH = [0.16, 0.28, 0.16, 0.44]; // 單行總高 = 1.04"（預留上下垂直雙點空間）
                     const baseLineGap = 0.22;
                     const singleLineTotalH = baseRowH.reduce((a, b) => a + b, 0);
                     const rawTotalH = lineCount * singleLineTotalH + Math.max(0, lineCount - 1) * baseLineGap;
@@ -1596,14 +1743,15 @@
                                 rowLowDots.push({ text: '', options: { ...noStyle } });
                             } else {
                                 notes.forEach((n) => {
-                                    // Row 1: 高八度點
-                                    const topDotText = n.octave >= 2 ? '••' : (n.octave >= 1 ? '•' : '');
+                                    // Row 1: 高八度點（倍高音採上下垂直雙點排列）
+                                    const topDotText = n.octave >= 2 ? '•\n•' : (n.octave >= 1 ? '•' : '');
                                     rowHighDots.push({
                                         text: topDotText,
                                         options: {
                                             ...noStyle,
                                             fontFace: FONT_NUM,
                                             fontSize: dotFontSize,
+                                            lineSpacingMultiple: 0.72,
                                             bold: true,
                                             color: '000000',
                                             align: 'center',
@@ -1643,15 +1791,15 @@
                                             valign: 'middle'
                                         }
                                     });
-
-                                    // Row 3: 低八度點
-                                    const botDotText = n.octave <= -2 ? '••' : (n.octave <= -1 ? '•' : '');
+                                    // Row 3: 低八度點（倍低音採上下垂直雙點排列）
+                                    const botDotText = n.octave <= -2 ? '•\n•' : (n.octave <= -1 ? '•' : '');
                                     rowLowDots.push({
                                         text: botDotText,
                                         options: {
                                             ...noStyle,
                                             fontFace: FONT_NUM,
                                             fontSize: dotFontSize,
+                                            lineSpacingMultiple: 0.72,
                                             bold: true,
                                             color: '000000',
                                             align: 'center',
@@ -1745,9 +1893,9 @@
                 line.forEach(tok => {
                     if (tok.isSpace && (!tok.notes || tok.notes.length === 0)) {
                         const spStyle = `${tdBase} width:14pt;`;
-                        rHigh += `<td style="${spStyle} height:9pt; line-height:9pt; font-size:8pt;">&nbsp;</td>`;
+                        rHigh += `<td style="${spStyle} height:11pt; line-height:11pt; font-size:8pt;">&nbsp;</td>`;
                         rNote += `<td style="${spStyle} height:18pt; line-height:18pt; font-size:14pt;">&nbsp;</td>`;
-                        rLow += `<td style="${spStyle} height:9pt; line-height:9pt; font-size:8pt;">&nbsp;</td>`;
+                        rLow += `<td style="${spStyle} height:11pt; line-height:11pt; font-size:8pt;">&nbsp;</td>`;
                         rLyric += `<td style="${spStyle} height:24pt; line-height:24pt; font-size:18pt;">&nbsp;</td>`;
                         return;
                     }
@@ -1758,21 +1906,23 @@
                     const colWidthPt = isMulti ? 15 : 24;
 
                     if (notes.length === 0) {
-                        rHigh += `<td style="${tdBase} width:${colWidthPt}pt; height:9pt; line-height:9pt; font-size:8pt;"></td>`;
+                        rHigh += `<td style="${tdBase} width:${colWidthPt}pt; height:11pt; line-height:11pt; font-size:8pt;"></td>`;
                         rNote += `<td style="${tdBase} width:${colWidthPt}pt; height:18pt; line-height:18pt; font-size:14pt;">&nbsp;</td>`;
-                        rLow += `<td style="${tdBase} width:${colWidthPt}pt; height:9pt; line-height:9pt; font-size:8pt;"></td>`;
+                        rLow += `<td style="${tdBase} width:${colWidthPt}pt; height:11pt; line-height:11pt; font-size:8pt;"></td>`;
                     } else {
                         notes.forEach(n => {
-                            const topDot = n.octave >= 2 ? '••' : (n.octave >= 1 ? '•' : '');
-                            const botDot = n.octave <= -2 ? '••' : (n.octave <= -1 ? '•' : '');
+                            const topDot = n.octave >= 2 ? '•<br>•' : (n.octave >= 1 ? '•' : '');
+                            const botDot = n.octave <= -2 ? '•<br>•' : (n.octave <= -1 ? '•' : '');
+                            const topLinePt = n.octave >= 2 ? '5.5pt' : '11pt';
+                            const botLinePt = n.octave <= -2 ? '5.5pt' : '11pt';
                             const notePt = isMulti ? 12 : 14;
                             const accHtml = n.accidental
                                 ? `<sup style="font-size:${Math.max(8, notePt - 4)}pt; font-weight:bold;">${n.accidental}</sup>`
                                 : '';
 
-                            rHigh += `<td style="${tdBase} width:${colWidthPt}pt; height:9pt; line-height:9pt; vertical-align:bottom; font-family:Arial,sans-serif; font-size:8pt; font-weight:bold; color:#000000;">${topDot}</td>`;
+                            rHigh += `<td style="${tdBase} width:${colWidthPt}pt; height:11pt; line-height:${topLinePt}; vertical-align:bottom; font-family:Arial,sans-serif; font-size:7.5pt; font-weight:bold; color:#000000;">${topDot}</td>`;
                             rNote += `<td style="${tdBase} width:${colWidthPt}pt; height:18pt; line-height:18pt; vertical-align:middle; font-family:Arial,sans-serif; font-size:${notePt}pt; font-weight:bold; color:#000000; white-space:nowrap;">${accHtml}${n.pitch}</td>`;
-                            rLow += `<td style="${tdBase} width:${colWidthPt}pt; height:9pt; line-height:9pt; vertical-align:top; font-family:Arial,sans-serif; font-size:8pt; font-weight:bold; color:#000000;">${botDot}</td>`;
+                            rLow += `<td style="${tdBase} width:${colWidthPt}pt; height:11pt; line-height:${botLinePt}; vertical-align:top; font-family:Arial,sans-serif; font-size:7.5pt; font-weight:bold; color:#000000;">${botDot}</td>`;
                         });
                     }
 
@@ -1876,7 +2026,7 @@
             const baseFontSize = Math.max(22, Math.round(sliderVal * 1.25));
             const paddingX = 44;
             const paddingY = 38;
-            const lineHeight = baseFontSize * 2.65;
+            const lineHeight = baseFontSize * 2.8;
             const spaceW = baseFontSize * 0.65;
 
             ctx.font = `400 ${baseFontSize}px "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
