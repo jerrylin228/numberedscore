@@ -1,0 +1,2142 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>歌詞簡譜對齊編輯器 (Jianpu Lyric Aligner)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PptxGenJS CDN: 用於產生原生可編輯、無底色框線的 PowerPoint (.pptx) 投影片 -->
+    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+    <!-- Google Fonts: Inter & Noto Sans TC -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --lyric-size: 20px;
+            --row-scale: 1.02;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+            background-color: #f1f5f9;
+            color: #0f172a;
+        }
+
+        /* 高密度單行歌詞列：整句水平排列不隨意斷行 */
+        .jianpu-line {
+            display: flex;
+            flex-wrap: nowrap;
+            align-items: flex-end;
+            padding: 1px 0;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .jianpu-line:last-child {
+            border-bottom: none;
+        }
+
+        /* 單一字元垂直堆疊欄 (總高約 58px，確保單一螢幕可顯示 8+ 行) */
+        .lyric-cell {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            user-select: none;
+            cursor: pointer;
+            border-radius: 5px;
+            padding: 0 2px;
+            min-width: calc(var(--lyric-size) * 1.32);
+            transition: background-color 0.1s ease, box-shadow 0.1s ease;
+            flex-shrink: 0;
+        }
+
+        .lyric-cell:hover {
+            background-color: #f8fafc;
+            box-shadow: 0 0 0 1px #cbd5e1;
+        }
+
+        .lyric-cell.active {
+            background-color: #eff6ff;
+            box-shadow: 0 0 0 1.5px #2563eb;
+            z-index: 5;
+        }
+
+        .lyric-cell.space-cell {
+            min-width: calc(var(--lyric-size) * 0.72);
+        }
+
+        /* 上方簡譜多音子欄群組 */
+        .note-subcols-wrap {
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 1px;
+        }
+
+        /* 單一音符子欄：高八度點(8px) + 數字(20px) + 低八度點(8px) */
+        .note-subcol {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 3px;
+            padding: 0 1px;
+        }
+
+        .note-subcol.note-selected {
+            background-color: #dbeafe;
+            color: #1d4ed8;
+            box-shadow: inset 0 0 0 1px #93c5fd;
+        }
+
+        .note-subcol.note-selected .octave-dot {
+            background-color: #1d4ed8;
+        }
+
+        /* 1. 高八度點列 (7px) */
+        .octave-top {
+            height: calc(7px * var(--row-scale));
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            gap: 1.5px;
+            line-height: 1;
+        }
+
+        /* 2. 簡譜數字與升降記號列 (19px) */
+        .note-row {
+            height: calc(19px * var(--row-scale));
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Inter', Arial, sans-serif;
+            font-weight: 700;
+            font-size: calc(var(--lyric-size) * 0.85);
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        .note-subcols-wrap.multi-2 .note-row {
+            font-size: calc(var(--lyric-size) * 0.75);
+        }
+        .note-subcols-wrap.multi-3 .note-row,
+        .note-subcols-wrap.multi-4 .note-row {
+            font-size: calc(var(--lyric-size) * 0.66);
+        }
+
+        .accidental-prefix {
+            font-size: 0.68em;
+            font-weight: 700;
+            line-height: 1;
+            margin-right: 0.5px;
+            transform: translateY(-0.22em);
+            display: inline-block;
+        }
+
+        /* 3. 低八度點列 (7px) */
+        .octave-bottom {
+            height: calc(7px * var(--row-scale));
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 1.5px;
+            line-height: 1;
+        }
+
+        .octave-dot {
+            width: 3.5px;
+            height: 3.5px;
+            background-color: #0f172a;
+            border-radius: 9999px;
+            display: inline-block;
+        }
+
+        /* 4. 歌詞字元列 (21px) */
+        .lyric-row {
+            height: calc(21px * var(--row-scale));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: var(--lyric-size);
+            line-height: 1;
+            font-weight: 400;
+            color: #0f172a;
+            white-space: pre;
+        }
+
+        /* 隱藏頁籤列預設捲軸 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* 美化主區捲軸 */
+        ::-webkit-scrollbar {
+            width: 7px;
+            height: 7px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- ==================== 1. 頂部標題 + 歌曲頁籤 + 全曲操作 (單一緊湊列，最高 44px) ==================== -->
+    <header class="bg-white border-b border-slate-200 px-3 h-[42px] max-h-[44px] flex items-center justify-between gap-2 z-20 shrink-0">
+        <!-- 左側：品牌標題 -->
+        <div class="flex items-center gap-2 shrink-0">
+            <div class="w-6 h-6 rounded-md bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
+                簡
+            </div>
+            <h1 class="text-sm font-bold text-slate-800 whitespace-nowrap tracking-tight">歌詞簡譜對齊編輯器</h1>
+        </div>
+
+        <!-- 中間：多歌曲頁籤列 (水平捲動不擠壓右側按鈕) -->
+        <nav class="flex-1 min-w-0 flex items-center gap-1 overflow-x-auto no-scrollbar px-1" id="songTabsBar" aria-label="歌曲頁籤列">
+            <!-- 動態生成歌曲頁籤 -->
+        </nav>
+
+        <!-- 右側：全曲匯出與 JSON 備份 (shrink-0 確保絕不裁切) -->
+        <div class="flex items-center gap-1.5 shrink-0">
+            <button onclick="exportToPPTX(null)" class="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-2.5 py-1 rounded-lg shadow-2xs transition active:scale-95 whitespace-nowrap shrink-0" title="將整首歌匯出為原生可編輯 PowerPoint 簡報（1 頁 = 1 張投影片）">
+                <span>匯出整首 PPTX</span>
+            </button>
+            <button onclick="exportAllSongsJSON()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium px-2 py-1 rounded-lg transition whitespace-nowrap shrink-0" title="匯出全部歌曲備份 (.json)">
+                匯出備份
+            </button>
+            <label class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium px-2 py-1 rounded-lg transition whitespace-nowrap shrink-0 cursor-pointer" title="匯入歌曲備份 (.json)">
+                匯入備份
+                <input type="file" id="jsonFileInput" accept=".json" class="hidden" onchange="importAllSongsJSON(event)">
+            </label>
+        </div>
+    </header>
+
+    <!-- ==================== 2. 固定簡譜編輯工具列 (單一緊湊列，含上/下一步與可鎖定記號按鈕) ==================== -->
+    <div class="bg-slate-50 border-b border-slate-200 px-3 h-[42px] max-h-[44px] flex items-center justify-between gap-2 z-10 shrink-0 overflow-x-auto no-scrollbar whitespace-nowrap">
+        <div class="flex items-center gap-1 shrink-0">
+            <!-- 上一步 / 下一步 -->
+            <button id="undoBtn" onclick="undoAction()" disabled class="px-2 h-6 rounded bg-white hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none border border-slate-300 text-slate-700 text-xs font-medium transition" title="復原上一步 (Ctrl+Z / Cmd+Z)">↩ 上一步</button>
+            <button id="redoBtn" onclick="redoAction()" disabled class="px-2 h-6 rounded bg-white hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none border border-slate-300 text-slate-700 text-xs font-medium transition" title="重做下一步 (Ctrl+Y / Ctrl+Shift+Z)">↪ 下一步</button>
+
+            <div class="h-4 w-px bg-slate-300 mx-0.5"></div>
+
+            <!-- 模式切換 -->
+            <div class="flex items-center bg-slate-200/80 p-0.5 rounded-md border border-slate-300/70">
+                <button id="modeOverwriteBtn" onclick="setInputMode('overwrite')" class="px-2 py-0.5 text-xs font-semibold rounded bg-white text-blue-600 shadow-2xs transition">
+                    單音覆蓋
+                </button>
+                <button id="modeAppendBtn" onclick="setInputMode('append')" class="px-2 py-0.5 text-xs font-semibold rounded text-slate-600 hover:text-slate-900 transition">
+                    多音連加 (+音)
+                </button>
+            </div>
+
+            <div class="h-4 w-px bg-slate-300 mx-0.5"></div>
+
+            <!-- 簡譜數字快速鍵 + 新增同字音符 + 刪除 -->
+            <button onclick="inputNoteDigit('1')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">1</button>
+            <button onclick="inputNoteDigit('2')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">2</button>
+            <button onclick="inputNoteDigit('3')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">3</button>
+            <button onclick="inputNoteDigit('4')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">4</button>
+            <button onclick="inputNoteDigit('5')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">5</button>
+            <button onclick="inputNoteDigit('6')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">6</button>
+            <button onclick="inputNoteDigit('7')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition">7</button>
+            <button onclick="inputNoteDigit('0')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition" title="休止符 0">0</button>
+            <button onclick="inputNoteDigit('-')" class="w-6 h-6 rounded bg-white hover:bg-blue-50 hover:text-blue-600 hover:border-blue-400 border border-slate-300 font-mono font-bold text-xs transition" title="延音線 -">-</button>
+            <button onclick="addExtraNoteSlot()" class="px-1.5 h-6 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-semibold transition" title="為目前歌詞新增同字音符 (+)">+音</button>
+            <button onclick="clearSelectedNote()" class="px-2 h-6 rounded bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs text-rose-600 font-semibold transition" title="刪除目前音符 (Backspace / Delete)">刪除</button>
+
+            <div class="h-4 w-px bg-slate-300 mx-0.5"></div>
+
+            <!-- 可保持開啟/關閉的八度切換群組 -->
+            <div class="flex items-center gap-1" role="group" aria-label="八度鎖定切換">
+                <button id="octHighBtn" onclick="toggleStickyOctave(1)" class="px-2 h-6 rounded border text-xs font-medium transition" title="開啟/關閉高八度鎖定 (快捷鍵: Q)">高八度 •</button>
+                <button id="octMidBtn" onclick="setStickyOctave(0)" class="px-2 h-6 rounded border text-xs font-medium transition" title="切換為中音 (快捷鍵: W)">中音</button>
+                <button id="octLowBtn" onclick="toggleStickyOctave(-1)" class="px-2 h-6 rounded border text-xs font-medium transition" title="開啟/關閉低八度鎖定 (快捷鍵: A)">低八度 •</button>
+            </div>
+
+            <div class="h-4 w-px bg-slate-300 mx-0.5"></div>
+
+            <!-- 可保持開啟/關閉的升降還原記號群組 -->
+            <div class="flex items-center gap-1" role="group" aria-label="升降還原鎖定切換">
+                <button id="accSharpBtn" onclick="toggleStickyAccidental('♯')" class="px-1.5 h-6 rounded border font-semibold text-xs transition" title="開啟/關閉升記號鎖定 (快捷鍵: #)">♯ 升</button>
+                <button id="accFlatBtn" onclick="toggleStickyAccidental('♭')" class="px-1.5 h-6 rounded border font-semibold text-xs transition" title="開啟/關閉降記號鎖定 (快捷鍵: b)">♭ 降</button>
+                <button id="accNaturalBtn" onclick="toggleStickyAccidental('♮')" class="px-1.5 h-6 rounded border font-semibold text-xs transition" title="開啟/關閉還原記號鎖定 (快捷鍵: n)">♮ 還原</button>
+                <button id="accClearBtn" onclick="clearStickyAccidental()" class="px-1.5 h-6 rounded bg-white hover:bg-slate-200 border border-slate-300 text-xs text-slate-600 transition" title="關閉記號鎖定並清除目前音符記號">清除記號</button>
+            </div>
+
+            <!-- 即時預設記號狀態指示標籤 -->
+            <span id="stickyModifierPill" class="ml-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-200/80 text-slate-600 border border-slate-300/70">
+                預設記號：中音
+            </span>
+        </div>
+
+        <!-- 右側顯示與匯出設定 -->
+        <div class="flex items-center gap-2.5 shrink-0 text-xs text-slate-600">
+            <label class="flex items-center gap-1 cursor-pointer select-none" title="勾選後，複製或下載的 PNG 圖片為透明背景">
+                <input type="checkbox" id="transparentBgCheckbox" checked class="accent-emerald-600 rounded cursor-pointer">
+                <span class="font-medium text-slate-700">透明圖底</span>
+            </label>
+            <div class="flex items-center gap-1" title="調整歌詞與簡譜顯示字級 (16px–28px)">
+                <span>字級</span>
+                <input type="range" id="fontSizeSlider" min="16" max="28" value="20" oninput="updateFontSize()" class="w-16 accent-blue-600 cursor-pointer">
+                <span id="fontSizeLabel" class="font-mono w-8 text-slate-700 font-medium">20px</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 3. 高密度多頁面簡譜工作區 ==================== -->
+    <main class="flex-1 overflow-y-auto px-3 py-2.5 flex flex-col items-center gap-3" id="pagesWorkspace">
+        <!-- 動態渲染各段落頁面卡片 -->
+    </main>
+
+    <!-- ==================== 4. 精簡底部狀態列 ==================== -->
+    <footer class="bg-white border-t border-slate-200 px-3 py-1 text-[11px] text-slate-500 flex items-center justify-between gap-2 shrink-0">
+        <div id="statusSelectionInfo" class="flex items-center gap-1.5 truncate">
+            <span class="inline-block w-2 h-2 rounded-full bg-blue-500"></span>
+            <span>點擊任一歌詞開始標註，方向鍵 ← → 移動</span>
+        </div>
+        <div class="flex items-center gap-3 shrink-0">
+            <span class="hidden lg:inline text-slate-400">
+                快捷鍵：音符 <kbd class="px-1 bg-slate-100 border rounded text-slate-600">1-7/0/-</kbd> ・ 八度鎖定 <kbd class="px-1 bg-slate-100 border rounded text-slate-600">Q/W/A</kbd> ・ 記號鎖定 <kbd class="px-1 bg-slate-100 border rounded text-slate-600">#/b/n</kbd> ・ 復原 <kbd class="px-1 bg-slate-100 border rounded text-slate-600">Ctrl+Z/Y</kbd>
+            </span>
+            <button id="autoMoveIndicator" class="cursor-pointer hover:text-blue-600 select-none font-medium text-slate-600" onclick="toggleAutoAdvance()">
+                ☑ 自動跳下一字
+            </button>
+        </div>
+    </footer>
+
+    <!-- ==================== 5. 貼上/編輯歌詞 Modal ==================== -->
+    <div id="lyricsModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden flex flex-col">
+            <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+                <h3 class="font-bold text-slate-800 text-sm" id="lyricsModalTitle">貼上/編輯本頁歌詞</h3>
+                <button onclick="closeLyricsModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="p-4 space-y-2.5">
+                <p class="text-xs text-slate-500">
+                    請貼上或編輯此頁的歌詞（每行代表一列簡譜）。空白會自動保留為間隔，標點符號在自動跳字時會智慧略過。
+                </p>
+                <textarea id="modalLyricsTextarea" rows="9" class="w-full p-3 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none leading-relaxed font-sans" placeholder="請貼上這一段的歌詞，例如：&#10;故事的小黃花 從出生那年就飄著&#10;童年的盪鞦韆 隨記憶一直晃到現在"></textarea>
+            </div>
+            <div class="px-4 py-3 border-t border-slate-100 bg-slate-50 flex flex-wrap items-center justify-end gap-2">
+                <button onclick="closeLyricsModal()" class="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition">取消</button>
+                <button onclick="applyModalLyrics(true)" class="px-3 py-1.5 text-xs font-semibold bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg transition">
+                    智慧保留原簡譜並更新
+                </button>
+                <button onclick="applyModalLyrics(false)" class="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-2xs transition">
+                    套用全新歌詞 (清空簡譜)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 6. 自訂確認對話框 Modal ==================== -->
+    <div id="confirmModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden p-4 space-y-3">
+            <h3 class="font-bold text-slate-800 text-sm" id="confirmModalTitle">確認操作</h3>
+            <p class="text-xs text-slate-600 leading-relaxed" id="confirmModalMessage">確定要執行此操作嗎？</p>
+            <div class="flex justify-end gap-2 pt-1">
+                <button onclick="closeConfirmModal()" class="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition">取消</button>
+                <button id="confirmModalOkBtn" class="px-3 py-1.5 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white rounded-lg shadow-2xs transition">確定執行</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 6.5 自訂名稱輸入對話框 Modal ==================== -->
+    <div id="promptModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden p-4 space-y-3">
+            <h3 class="font-bold text-slate-800 text-sm" id="promptModalTitle">修改名稱</h3>
+            <input type="text" id="promptModalInput" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" placeholder="請輸入名稱">
+            <div class="flex justify-end gap-2 pt-1">
+                <button onclick="closePromptModal()" class="px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition">取消</button>
+                <button id="promptModalOkBtn" class="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-2xs transition">儲存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 7. 浮動提示訊息容器 ==================== -->
+    <div id="toastContainer" class="fixed bottom-9 right-4 z-50 flex flex-col gap-1.5 max-w-md pointer-events-none"></div>
+
+    <!-- 離屏高解析度 Canvas (圖片匯出專用) -->
+    <canvas id="exportCanvas" class="hidden"></canvas>
+
+    <script>
+        // =========================================================================
+        // 核心狀態與預載 8 行完整範例資料《晴天 (範例)》
+        // =========================================================================
+        const STORAGE_KEY = 'jianpu_lyric_aligner_v5';
+        const MAX_HISTORY = 60;
+
+        let appState = {
+            activeSongId: '',
+            songs: []
+        };
+
+        let selectedPos = { pageIdx: 0, lineIdx: 0, tokenIdx: 0, noteIdx: 0 };
+        let inputMode = 'overwrite'; // 'overwrite' | 'append'
+        let autoAdvance = true;
+        let editingModalPageIdx = 0;
+
+        // 可保持開啟/關閉的八度與升降還原鎖定狀態
+        let activeOctave = 0;       // 0 (中音), 1 (高八度 •), -1 (低八度 •)
+        let activeAccidental = '';  // '' (無), '♯', '♭', '♮'
+
+        // 上一步 / 下一步歷史堆疊
+        let undoStack = [];
+        let redoStack = [];
+
+        const PUNCTUATION_REGEX = /^[，。、！？；：「」『』（）(),.!?;:~—…]+$/;
+
+        /**
+         * 輔助函式：將精簡譜面定義陣列轉為標準 Token 物件列
+         * 格式：[歌詞字元, [[音高, 八度, 升降記號], ...]]
+         */
+        function buildTokensFromCompactSpec(specList) {
+            return specList.map(([char, noteSpecs]) => {
+                if (char === ' ' && (!noteSpecs || noteSpecs.length === 0)) {
+                    return { lyric: ' ', isSpace: true, notes: [] };
+                }
+                const notes = (noteSpecs || []).map(([pitch, octave = 0, accidental = '']) => ({
+                    pitch: String(pitch),
+                    octave,
+                    accidental
+                }));
+                return { lyric: char, isSpace: false, notes };
+            });
+        }
+
+        /**
+         * 建立預設歌曲《晴天 (範例)》：
+         * 第 1 頁完整預載 8 行主歌，開啟即可在單一畫面同時檢視 8 行歌詞與簡譜！
+         */
+        function createSampleSong() {
+            const page1Lines = [
+                // 第 1 行：故事的小黃花 從出生那年就飄著
+                buildTokensFromCompactSpec([
+                    ['故', [['2', 1]]], ['事', [['2', 1]]], ['的', [['5', 0]]], ['小', [['5', 0]]], ['黃', [['6', 0]]], ['花', [['7', 0]]],
+                    [' ', []],
+                    ['從', [['2', 1]]], ['出', [['2', 1]]], ['生', [['5', 0]]], ['那', [['5', 0]]], ['年', [['6', 0]]], ['就', [['7', 0]]],
+                    ['飄', [['6', 0], ['5', 0]]], ['著', [['2', 0]]]
+                ]),
+                // 第 2 行：童年的盪鞦韆 隨記憶一直晃到現在
+                buildTokensFromCompactSpec([
+                    ['童', [['2', 1]]], ['年', [['2', 1]]], ['的', [['5', 0]]], ['盪', [['5', 0]]], ['鞦', [['6', 0]]], ['韆', [['7', 0]]],
+                    [' ', []],
+                    ['隨', [['7', 0]]], ['記', [['7', 0]]], ['憶', [['7', 0]]], ['一', [['1', 1]]], ['直', [['7', 0]]], ['晃', [['6', 0]]],
+                    ['到', [['1', 1]]], ['現', [['7', 0], ['6', 0]]], ['在', [['5', 0]]]
+                ]),
+                // 第 3 行：吹著前奏望著天空 我想起花瓣試著掉落
+                buildTokensFromCompactSpec([
+                    ['吹', [['2', 0]]], ['著', [['5', 0]]], ['前', [['5', 0]]], ['奏', [['7', 0]]], ['望', [['1', 1]]], ['著', [['7', 0]]], ['天', [['6', 0]]], ['空', [['5', 0]]],
+                    [' ', []],
+                    ['我', [['6', 0]]], ['想', [['7', 0]]], ['起', [['7', 0]]], ['花', [['7', 0]]], ['瓣', [['7', 0]]], ['試', [['6', 0]]], ['著', [['7', 0]]], ['掉', [['6', 0]]], ['落', [['5', 0]]]
+                ]),
+                // 第 4 行：為妳翹課的那一天 花落的那一天
+                buildTokensFromCompactSpec([
+                    ['為', [['4', 0, '♯']]], ['妳', [['5', 0]]], ['翹', [['5', 0]]], ['課', [['5', 0]]], ['的', [['5', 0]]], ['那', [['4', 0, '♯']]], ['一', [['5', 0]]], ['天', [['5', 0]]],
+                    [' ', []],
+                    ['花', [['5', 0]]], ['落', [['5', 0]]], ['的', [['5', 0]]], ['那', [['4', 0, '♯']]], ['一', [['5', 0]]], ['天', [['5', 0]]]
+                ]),
+                // 第 5 行：教室的那一間 我怎麼看不見
+                buildTokensFromCompactSpec([
+                    ['教', [['5', 0]]], ['室', [['5', 0]]], ['的', [['5', 0]]], ['那', [['4', 0]]], ['一', [['5', 0]]], ['間', [['5', 0]]],
+                    [' ', []],
+                    ['我', [['5', 0]]], ['怎', [['5', 0]]], ['麼', [['5', 0]]], ['看', [['2', 1]]], ['不', [['2', 1]]], ['見', [['2', 1]]]
+                ]),
+                // 第 6 行：消失的下雨天 我好想再淋一遍
+                buildTokensFromCompactSpec([
+                    ['消', [['2', 1]]], ['失', [['2', 1]]], ['的', [['2', 1]]], ['下', [['2', 1]]], ['雨', [['2', 1]]], ['天', [['2', 1]]],
+                    [' ', []],
+                    ['我', [['2', 1]]], ['好', [['2', 1]]], ['想', [['2', 1]]], ['再', [['2', 1]]], ['淋', [['1', 1]]], ['一', [['1', 1]]], ['遍', [['7', 0]]]
+                ]),
+                // 第 7 行：沒想到失去的勇氣我還留著
+                buildTokensFromCompactSpec([
+                    ['沒', [['6', 0]]], ['想', [['5', 0]]], ['到', [['4', 0, '♯']]], ['失', [['5', 0]]], ['去', [['3', 0]]], ['的', [['4', 0, '♯']]],
+                    ['勇', [['5', 0]]], ['氣', [['2', 1]]], ['我', [['1', 1]]], ['還', [['7', 0]]], ['留', [['5', 0]]], ['著', [['5', 0]]]
+                ]),
+                // 第 8 行：好想再問一遍 妳會等待還是離開
+                buildTokensFromCompactSpec([
+                    ['好', [['3', 0]]], ['想', [['5', 0]]], ['再', [['5', 0]]], ['問', [['5', 0]]], ['一', [['7', 0]]], ['遍', [['5', 0]]],
+                    [' ', []],
+                    ['妳', [['3', 0]]], ['會', [['4', 0, '♯']]], ['等', [['5', 0]]], ['待', [['2', 1]]], ['還', [['1', 1]]], ['是', [['7', 0]]], ['離', [['5', 0]]], ['開', [['6', 0]]]
+                ])
+            ];
+
+            const page2Lines = [
+                buildTokensFromCompactSpec([
+                    ['颳', [['7', 0]]], ['風', [['6', 0]]], ['這', [['1', 1]]], ['天', [['7', 0]]],
+                    [' ', []],
+                    ['我', [['5', 0]]], ['試', [['2', 1]]], ['過', [['4', 0, '♯']]], ['握', [['5', 0]]], ['著', [['4', 0, '♯']]], ['妳', [['2', 1]]], ['手', [['5', 0]]]
+                ]),
+                buildTokensFromCompactSpec([
+                    ['但', [['5', 0]]], ['偏', [['3', 1]]], ['偏', [['3', 1]]],
+                    [' ', []],
+                    ['雨', [['3', 1]]], ['漸', [['2', 1]]], ['漸', [['2', 1]]],
+                    [' ', []],
+                    ['大', [['2', 1]]], ['到', [['1', 1]]], ['我', [['7', 0]]], ['看', [['6', 0]]], ['妳', [['7', 0]]], ['不', [['1', 1]]], ['見', [['7', 0]]]
+                ]),
+                buildTokensFromCompactSpec([
+                    ['還', [['7', 0]]], ['要', [['1', 1]]], ['多', [['2', 1]]], ['久', [['7', 0]]],
+                    [' ', []],
+                    ['我', [['1', 1]]], ['才', [['2', 1]]], ['能', [['4', 0, '♯']]], ['在', [['6', 0]]], ['妳', [['4', 0, '♯']]], ['身', [['5', 0]]], ['邊', [['5', 0]]]
+                ]),
+                buildTokensFromCompactSpec([
+                    ['等', [['5', 0]]], ['到', [['5', 0]]], ['放', [['2', 1]]], ['晴', [['2', 1]]], ['的', [['3', 1]]], ['那', [['2', 1]]], ['天', [['1', 1]]],
+                    [' ', []],
+                    ['也', [['6', 0]]], ['許', [['7', 0]]], ['我', [['1', 1]]], ['會', [['2', 1]]], ['比', [['3', 1]]], ['較', [['5', 0]]], ['好', [['3', 1]]], ['一', [['4', 0, '♯']]], ['點', [['4', 0, '♯']]]
+                ])
+            ];
+
+            return {
+                id: 'song_sample_sunny_v5',
+                title: '晴天 (範例)',
+                pages: [
+                    { id: 'page_sample_1', title: '主歌 A', lines: page1Lines },
+                    { id: 'page_sample_2', title: '副歌', lines: page2Lines }
+                ]
+            };
+        }
+
+        // 初始化應用程式
+        window.addEventListener('DOMContentLoaded', () => {
+            loadState();
+            updateModifierToolbarUI();
+            updateUndoRedoButtons();
+            renderAll();
+            bindKeyboardShortcuts();
+        });
+
+        // =========================================================================
+        // 上一步 / 下一步歷史紀錄管理
+        // =========================================================================
+        function pushUndoSnapshot() {
+            undoStack.push({
+                songs: JSON.parse(JSON.stringify(appState.songs)),
+                activeSongId: appState.activeSongId,
+                selectedPos: { ...selectedPos }
+            });
+            if (undoStack.length > MAX_HISTORY) {
+                undoStack.shift();
+            }
+            redoStack = [];
+            updateUndoRedoButtons();
+        }
+
+        function undoAction() {
+            if (undoStack.length === 0) return;
+            redoStack.push({
+                songs: JSON.parse(JSON.stringify(appState.songs)),
+                activeSongId: appState.activeSongId,
+                selectedPos: { ...selectedPos }
+            });
+            const prev = undoStack.pop();
+            appState.songs = prev.songs;
+            appState.activeSongId = prev.activeSongId;
+            selectedPos = prev.selectedPos;
+            updateUndoRedoButtons();
+            renderAll();
+            showToast('↩ 已復原上一步', 1400);
+        }
+
+        function redoAction() {
+            if (redoStack.length === 0) return;
+            undoStack.push({
+                songs: JSON.parse(JSON.stringify(appState.songs)),
+                activeSongId: appState.activeSongId,
+                selectedPos: { ...selectedPos }
+            });
+            const next = redoStack.pop();
+            appState.songs = next.songs;
+            appState.activeSongId = next.activeSongId;
+            selectedPos = next.selectedPos;
+            updateUndoRedoButtons();
+            renderAll();
+            showToast('↪ 已重做下一步', 1400);
+        }
+
+        function updateUndoRedoButtons() {
+            const undoBtn = document.getElementById('undoBtn');
+            const redoBtn = document.getElementById('redoBtn');
+            if (undoBtn) undoBtn.disabled = undoStack.length === 0;
+            if (redoBtn) redoBtn.disabled = redoStack.length === 0;
+        }
+
+        // =========================================================================
+        // 1. 本地儲存載入、狀態取得與整體畫面渲染
+        // =========================================================================
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+            } catch (err) {
+                console.warn('無法寫入 localStorage:', err);
+            }
+        }
+
+        function loadState() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (parsed && Array.isArray(parsed.songs) && parsed.songs.length > 0) {
+                        appState = parsed;
+                        if (!appState.songs.some(s => s.id === appState.activeSongId)) {
+                            appState.activeSongId = appState.songs[0].id;
+                        }
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.warn('讀取本地資料失敗，將載入預設範例:', err);
+            }
+            const sample = createSampleSong();
+            appState = {
+                activeSongId: sample.id,
+                songs: [sample]
+            };
+        }
+
+        function getActiveSong() {
+            if (!appState.songs || appState.songs.length === 0) {
+                const sample = createSampleSong();
+                appState = { activeSongId: sample.id, songs: [sample] };
+            }
+            return appState.songs.find(s => s.id === appState.activeSongId) || appState.songs[0];
+        }
+
+        function renderAll() {
+            saveState();
+            renderSongTabs();
+            renderPagesWorkspace();
+            updateSelectionStatus();
+        }
+
+        // =========================================================================
+        // 2. 多歌曲頁籤管理 (新增、切換、重新命名、複製、刪除)
+        // =========================================================================
+        function renderSongTabs() {
+            const bar = document.getElementById('songTabsBar');
+            if (!bar) return;
+
+            let html = '';
+            appState.songs.forEach((song) => {
+                const isActive = song.id === appState.activeSongId;
+                if (isActive) {
+                    html += `
+                        <div class="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg px-2.5 py-1 text-xs font-bold shrink-0 shadow-2xs">
+                            <button onclick="renameSongTab('${song.id}')" class="hover:underline truncate max-w-[140px]" title="點擊修改歌曲名稱">${escapeHtml(song.title)}</button>
+                            <button onclick="renameSongTab('${song.id}')" class="text-blue-500 hover:text-blue-800 p-0.5 rounded" title="重新命名歌曲">✎</button>
+                            <button onclick="duplicateSongTab('${song.id}')" class="text-blue-500 hover:text-blue-800 p-0.5 rounded" title="複製此歌曲頁籤">⧉</button>
+                            ${appState.songs.length > 1 ? `<button onclick="deleteSongTab('${song.id}')" class="text-rose-400 hover:text-rose-600 p-0.5 rounded" title="刪除此歌曲頁籤">✕</button>` : ''}
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <button onclick="switchSongTab('${song.id}')" class="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-transparent rounded-lg px-2.5 py-1 text-xs font-medium shrink-0 transition max-w-[140px] truncate" title="切換至「${escapeHtml(song.title)}」">
+                            ${escapeHtml(song.title)}
+                        </button>
+                    `;
+                }
+            });
+
+            html += `
+                <button onclick="addSongTab()" class="inline-flex items-center gap-1 bg-white hover:bg-blue-50 text-blue-600 border border-dashed border-blue-300 rounded-lg px-2 py-1 text-xs font-semibold shrink-0 transition" title="新增一首新歌曲頁籤">
+                    + 新增歌曲
+                </button>
+            `;
+
+            bar.innerHTML = html;
+        }
+
+        function switchSongTab(songId) {
+            if (appState.activeSongId === songId) return;
+            appState.activeSongId = songId;
+            selectedPos = { pageIdx: 0, lineIdx: 0, tokenIdx: 0, noteIdx: 0 };
+            renderAll();
+        }
+
+        function addSongTab() {
+            pushUndoSnapshot();
+            const newIdx = appState.songs.length + 1;
+            const newSong = {
+                id: 'song_' + Date.now(),
+                title: `新歌曲 ${newIdx}`,
+                pages: [
+                    {
+                        id: 'page_' + Date.now(),
+                        title: '第 1 段',
+                        lines: parseTextToLines('請點擊上方「編輯/貼上本頁歌詞」貼入歌詞\n第二行歌詞範例')
+                    }
+                ]
+            };
+            appState.songs.push(newSong);
+            appState.activeSongId = newSong.id;
+            selectedPos = { pageIdx: 0, lineIdx: 0, tokenIdx: 0, noteIdx: 0 };
+            renderAll();
+            showToast(`🎵 已新增歌曲頁籤「${newSong.title}」`);
+        }
+
+        function renameSongTab(songId) {
+            const song = appState.songs.find(s => s.id === songId);
+            if (!song) return;
+            openPromptModal('修改歌曲名稱', song.title, (newTitle) => {
+                const trimmed = newTitle.trim();
+                if (!trimmed || trimmed === song.title) return;
+                pushUndoSnapshot();
+                song.title = trimmed;
+                renderAll();
+                showToast(`✏️ 已更名為「${trimmed}」`);
+            });
+        }
+
+        function duplicateSongTab(songId) {
+            const song = appState.songs.find(s => s.id === songId);
+            if (!song) return;
+            pushUndoSnapshot();
+            const cloned = JSON.parse(JSON.stringify(song));
+            cloned.id = 'song_' + Date.now();
+            cloned.title = `${song.title} (副本)`;
+            cloned.pages.forEach((p, idx) => { p.id = `page_${Date.now()}_${idx}`; });
+            appState.songs.push(cloned);
+            appState.activeSongId = cloned.id;
+            selectedPos = { pageIdx: 0, lineIdx: 0, tokenIdx: 0, noteIdx: 0 };
+            renderAll();
+            showToast(`⧉ 已複製歌曲為「${cloned.title}」`);
+        }
+
+        function deleteSongTab(songId) {
+            if (appState.songs.length <= 1) {
+                showToast('⚠️ 至少需保留一首歌曲頁籤');
+                return;
+            }
+            const song = appState.songs.find(s => s.id === songId);
+            if (!song) return;
+            openConfirmModal(
+                '刪除歌曲頁籤',
+                `確定要刪除整首「${song.title}」嗎？（刪除後仍可按「上一步」復原）`,
+                () => {
+                    pushUndoSnapshot();
+                    const idx = appState.songs.findIndex(s => s.id === songId);
+                    appState.songs.splice(idx, 1);
+                    if (appState.activeSongId === songId) {
+                        const nextSong = appState.songs[Math.max(0, idx - 1)];
+                        appState.activeSongId = nextSong.id;
+                    }
+                    selectedPos = { pageIdx: 0, lineIdx: 0, tokenIdx: 0, noteIdx: 0 };
+                    renderAll();
+                    showToast(`🗑️ 已刪除歌曲「${song.title}」`);
+                }
+            );
+        }
+
+        // =========================================================================
+        // 3. 多頁面分段渲染與頁面增刪移動操作
+        // =========================================================================
+        function renderPagesWorkspace() {
+            const workspace = document.getElementById('pagesWorkspace');
+            if (!workspace) return;
+            const song = getActiveSong();
+
+            // 確保 selectedPos 在合法範圍內
+            if (selectedPos.pageIdx >= song.pages.length) {
+                selectedPos = { pageIdx: 0, lineIdx: 0, tokenIdx: 0, noteIdx: 0 };
+            }
+
+            let html = '';
+            song.pages.forEach((page, pIdx) => {
+                let linesHtml = '';
+                page.lines.forEach((line, lIdx) => {
+                    let tokensHtml = '';
+                    line.forEach((tok, tIdx) => {
+                        const isCellActive = (
+                            selectedPos.pageIdx === pIdx &&
+                            selectedPos.lineIdx === lIdx &&
+                            selectedPos.tokenIdx === tIdx
+                        );
+                        const notes = tok.notes || [];
+                        const isPureSpace = tok.isSpace && notes.length === 0;
+                        const cellClasses = [
+                            'lyric-cell',
+                            isPureSpace ? 'space-cell' : '',
+                            isCellActive ? 'active' : ''
+                        ].filter(Boolean).join(' ');
+
+                        let subcolsHtml = '';
+                        if (notes.length === 0) {
+                            subcolsHtml = `
+                                <div class="note-subcols-wrap">
+                                    <div class="note-subcol">
+                                        <div class="octave-top"></div>
+                                        <div class="note-row">&nbsp;</div>
+                                        <div class="octave-bottom"></div>
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            const multiClass = notes.length > 1 ? ` multi-${Math.min(4, notes.length)}` : '';
+                            const innerCols = notes.map((n, nIdx) => {
+                                const isNoteSelected = isCellActive && selectedPos.noteIdx === nIdx;
+                                const topDots = n.octave >= 1 ? '<span class="octave-dot"></span>'.repeat(Math.min(2, n.octave)) : '';
+                                const botDots = n.octave <= -1 ? '<span class="octave-dot"></span>'.repeat(Math.min(2, Math.abs(n.octave))) : '';
+                                const accHtml = n.accidental ? `<span class="accidental-prefix">${escapeHtml(n.accidental)}</span>` : '';
+                                return `
+                                    <div onclick="event.stopPropagation(); selectToken(${pIdx}, ${lIdx}, ${tIdx}, ${nIdx})" class="note-subcol ${isNoteSelected ? 'note-selected' : ''}">
+                                        <div class="octave-top">${topDots}</div>
+                                        <div class="note-row">${accHtml}${escapeHtml(n.pitch)}</div>
+                                        <div class="octave-bottom">${botDots}</div>
+                                    </div>
+                                `;
+                            }).join('');
+                            subcolsHtml = `<div class="note-subcols-wrap${multiClass}">${innerCols}</div>`;
+                        }
+
+                        tokensHtml += `
+                            <div id="cell_${pIdx}_${lIdx}_${tIdx}" onclick="selectToken(${pIdx}, ${lIdx}, ${tIdx}, 0)" class="${cellClasses}">
+                                ${subcolsHtml}
+                                <div class="lyric-row">${escapeHtml(tok.lyric)}</div>
+                            </div>
+                        `;
+                    });
+                    linesHtml += `<div class="jianpu-line">${tokensHtml}</div>`;
+                });
+
+                html += `
+                    <section class="w-full max-w-6xl bg-white rounded-xl border border-slate-200 shadow-2xs px-3.5 py-2.5 flex flex-col gap-1.5">
+                        <!-- 頁面卡片標頭 -->
+                        <div class="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-slate-100">
+                            <div class="flex items-center gap-2">
+                                <span class="px-2 py-0.5 rounded-md bg-blue-600 text-white font-mono font-bold text-[11px]">P.${pIdx + 1}</span>
+                                <button onclick="renamePageTitle(${pIdx})" class="text-xs font-bold text-slate-700 hover:text-blue-600 hover:underline flex items-center gap-1" title="點擊修改此頁段落名稱">
+                                    <span>${escapeHtml(page.title || `第 ${pIdx + 1} 頁`)}</span>
+                                    <span class="text-slate-400 font-normal">✎</span>
+                                </button>
+                                <span class="text-[11px] text-slate-400 hidden sm:inline">（共 ${page.lines.length} 行）</span>
+                            </div>
+
+                            <div class="flex flex-wrap items-center gap-1">
+                                <button onclick="openLyricsModal(${pIdx})" class="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition">
+                                    編輯/貼上本頁歌詞
+                                </button>
+                                <button onclick="clearPageNotes(${pIdx})" class="px-2 py-1 rounded-md bg-slate-100 hover:bg-amber-50 hover:text-amber-700 text-slate-600 text-xs font-medium transition">
+                                    清空本頁簡譜
+                                </button>
+                                <button onclick="exportToPPTX(${pIdx})" class="px-2 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition" title="將本頁匯出為原生可編輯 PPTX 投影片">
+                                    匯出 PPTX
+                                </button>
+                                <button onclick="copySingleTableForOffice(${pIdx})" class="px-2 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition" title="複製無框線單一表格至剪貼簿（貼入 PPT 投影片空白處）">
+                                    複製 Word/PPT
+                                </button>
+                                <button onclick="copyPageAsImage(${pIdx})" class="px-2 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold transition" title="複製 3x 高解析度圖片至剪貼簿">
+                                    複製圖片
+                                </button>
+                                <button onclick="downloadPageAsPNG(${pIdx})" class="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition" title="下載 PNG 圖檔">
+                                    PNG
+                                </button>
+                                <button onclick="movePage(${pIdx}, -1)" ${pIdx === 0 ? 'disabled' : ''} class="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 disabled:opacity-35 disabled:pointer-events-none text-slate-700 text-xs font-bold transition" title="上移此頁">
+                                    ↑
+                                </button>
+                                <button onclick="movePage(${pIdx}, 1)" ${pIdx === song.pages.length - 1 ? 'disabled' : ''} class="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 disabled:opacity-35 disabled:pointer-events-none text-slate-700 text-xs font-bold transition" title="下移此頁">
+                                    ↓
+                                </button>
+                                <button onclick="deletePage(${pIdx})" ${song.pages.length <= 1 ? 'disabled' : ''} class="px-2 py-1 rounded-md bg-rose-50 hover:bg-rose-100 disabled:opacity-35 disabled:pointer-events-none text-rose-600 text-xs font-semibold transition" title="刪除此頁">
+                                    刪除本頁
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 簡譜與歌詞對齊畫布 -->
+                        <div class="overflow-x-auto py-0.5">
+                            ${linesHtml}
+                        </div>
+                    </section>
+                `;
+            });
+
+            html += `
+                <button onclick="addPage()" class="w-full max-w-6xl py-2.5 rounded-xl border-2 border-dashed border-slate-300 hover:border-blue-400 bg-white/60 hover:bg-blue-50/60 text-slate-600 hover:text-blue-700 text-xs font-bold transition flex items-center justify-center gap-1.5">
+                    <span>+ 向下新增頁面（新增下一段歌詞）</span>
+                </button>
+            `;
+
+            workspace.innerHTML = html;
+        }
+
+        function renamePageTitle(pIdx) {
+            const song = getActiveSong();
+            if (!song || !song.pages[pIdx]) return;
+            const page = song.pages[pIdx];
+            openPromptModal(`修改第 ${pIdx + 1} 頁段落名稱`, page.title, (newTitle) => {
+                const trimmed = newTitle.trim();
+                if (!trimmed || trimmed === page.title) return;
+                pushUndoSnapshot();
+                page.title = trimmed;
+                renderAll();
+            });
+        }
+
+        function addPage() {
+            const song = getActiveSong();
+            if (!song) return;
+            pushUndoSnapshot();
+            const newPageIdx = song.pages.length;
+            song.pages.push({
+                id: 'page_' + Date.now(),
+                title: `第 ${newPageIdx + 1} 段`,
+                lines: parseTextToLines('請貼上此段歌詞')
+            });
+            selectedPos = { pageIdx: newPageIdx, lineIdx: 0, tokenIdx: 0, noteIdx: 0 };
+            renderAll();
+            openLyricsModal(newPageIdx);
+        }
+
+        function movePage(pIdx, direction) {
+            const song = getActiveSong();
+            if (!song) return;
+            const targetIdx = pIdx + direction;
+            if (targetIdx < 0 || targetIdx >= song.pages.length) return;
+            pushUndoSnapshot();
+            const temp = song.pages[pIdx];
+            song.pages[pIdx] = song.pages[targetIdx];
+            song.pages[targetIdx] = temp;
+            if (selectedPos.pageIdx === pIdx) {
+                selectedPos.pageIdx = targetIdx;
+            } else if (selectedPos.pageIdx === targetIdx) {
+                selectedPos.pageIdx = pIdx;
+            }
+            renderAll();
+            showToast(`已調整頁面順序為 P.${targetIdx + 1}`);
+        }
+
+        function deletePage(pIdx) {
+            const song = getActiveSong();
+            if (!song || song.pages.length <= 1) {
+                showToast('⚠️ 每首歌至少需保留 1 頁');
+                return;
+            }
+            const page = song.pages[pIdx];
+            openConfirmModal(
+                '刪除頁面',
+                `確定要刪除「P.${pIdx + 1} ${page.title}」嗎？（刪除後仍可按「上一步」復原）`,
+                () => {
+                    pushUndoSnapshot();
+                    song.pages.splice(pIdx, 1);
+                    selectedPos = {
+                        pageIdx: Math.max(0, Math.min(pIdx, song.pages.length - 1)),
+                        lineIdx: 0,
+                        tokenIdx: 0,
+                        noteIdx: 0
+                    };
+                    renderAll();
+                    showToast(`🗑️ 已刪除頁面「${page.title}」`);
+                }
+            );
+        }
+
+        function clearPageNotes(pIdx) {
+            const song = getActiveSong();
+            if (!song || !song.pages[pIdx]) return;
+            openConfirmModal(
+                '清空本頁簡譜',
+                `確定要清除「P.${pIdx + 1}」的所有簡譜數字與記號（保留歌詞）嗎？`,
+                () => {
+                    pushUndoSnapshot();
+                    song.pages[pIdx].lines.forEach(line => {
+                        line.forEach(tok => { tok.notes = []; });
+                    });
+                    selectedPos.noteIdx = 0;
+                    renderAll();
+                    showToast(`🧹 已清空第 ${pIdx + 1} 頁簡譜`);
+                }
+            );
+        }
+
+        // =========================================================================
+        // 4. 貼上/編輯本頁歌詞 Modal 與智慧保留簡譜對齊
+        // =========================================================================
+        function parseTextToLines(rawText) {
+            const rawLines = String(rawText || '')
+                .replace(/\r\n/g, '\n')
+                .split('\n')
+                .filter((line, idx, arr) => line.trim().length > 0 || arr.length === 1);
+
+            if (rawLines.length === 0) {
+                return [[{ lyric: ' ', isSpace: true, notes: [] }]];
+            }
+
+            return rawLines.map(lineStr => {
+                const chars = Array.from(lineStr);
+                if (chars.length === 0) {
+                    return [{ lyric: ' ', isSpace: true, notes: [] }];
+                }
+                return chars.map(ch => ({
+                    lyric: ch,
+                    isSpace: /\s/.test(ch),
+                    notes: []
+                }));
+            });
+        }
+
+        function openLyricsModal(pIdx) {
+            const song = getActiveSong();
+            if (!song || !song.pages[pIdx]) return;
+            editingModalPageIdx = pIdx;
+            const page = song.pages[pIdx];
+            const plainLyrics = page.lines
+                .map(line => line.map(tok => tok.lyric).join(''))
+                .join('\n');
+
+            document.getElementById('lyricsModalTitle').textContent = `貼上/編輯歌詞 — P.${pIdx + 1} ${page.title}`;
+            const textarea = document.getElementById('modalLyricsTextarea');
+            textarea.value = plainLyrics;
+
+            const modal = document.getElementById('lyricsModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => {
+                textarea.focus();
+                textarea.select();
+            }, 30);
+        }
+
+        function closeLyricsModal() {
+            const modal = document.getElementById('lyricsModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function applyModalLyrics(preserveExistingNotes) {
+            const song = getActiveSong();
+            if (!song || !song.pages[editingModalPageIdx]) return;
+            const rawText = document.getElementById('modalLyricsTextarea').value;
+            const newLines = parseTextToLines(rawText);
+            const oldLines = song.pages[editingModalPageIdx].lines;
+
+            pushUndoSnapshot();
+
+            if (preserveExistingNotes) {
+                newLines.forEach((newLine, lIdx) => {
+                    if (!oldLines[lIdx]) return;
+                    const oldNonSpaceNotes = oldLines[lIdx]
+                        .filter(t => !t.isSpace || (t.notes && t.notes.length > 0))
+                        .map(t => JSON.parse(JSON.stringify(t.notes || [])));
+
+                    let ptr = 0;
+                    newLine.forEach(tok => {
+                        if (!tok.isSpace && ptr < oldNonSpaceNotes.length) {
+                            tok.notes = oldNonSpaceNotes[ptr];
+                            ptr++;
+                        }
+                    });
+                });
+            }
+
+            song.pages[editingModalPageIdx].lines = newLines;
+            selectedPos = { pageIdx: editingModalPageIdx, lineIdx: 0, tokenIdx: 0, noteIdx: 0 };
+            closeLyricsModal();
+            renderAll();
+            showToast(preserveExistingNotes ? '✅ 已更新歌詞並智慧保留原簡譜' : '✅ 已套用全新歌詞');
+        }
+
+        // =========================================================================
+        // 5. 游標選取、鍵盤導覽、可鎖定八度與升降記號、簡譜輸入
+        // =========================================================================
+        function getCurrentToken() {
+            const song = getActiveSong();
+            const page = song && song.pages[selectedPos.pageIdx];
+            const line = page && page.lines[selectedPos.lineIdx];
+            return line && line[selectedPos.tokenIdx];
+        }
+
+        function selectToken(pageIdx, lineIdx, tokenIdx, noteIdx = 0) {
+            const song = getActiveSong();
+            if (!song || !song.pages[pageIdx]) return;
+            const page = song.pages[pageIdx];
+            const clampedLine = Math.max(0, Math.min(lineIdx, page.lines.length - 1));
+            const line = page.lines[clampedLine];
+            const clampedToken = Math.max(0, Math.min(tokenIdx, line.length - 1));
+            const tok = line[clampedToken];
+            const maxNoteIdx = Math.max(0, (tok.notes ? tok.notes.length : 1) - 1);
+
+            selectedPos = {
+                pageIdx,
+                lineIdx: clampedLine,
+                tokenIdx: clampedToken,
+                noteIdx: Math.max(0, Math.min(noteIdx, maxNoteIdx))
+            };
+
+            renderPagesWorkspace();
+            updateSelectionStatus();
+
+            const cellEl = document.getElementById(`cell_${pageIdx}_${clampedLine}_${clampedToken}`);
+            if (cellEl) {
+                cellEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            }
+        }
+
+        function updateSelectionStatus() {
+            const statusEl = document.getElementById('statusSelectionInfo');
+            if (!statusEl) return;
+            const tok = getCurrentToken();
+            if (!tok) return;
+
+            const lyricDisplay = tok.isSpace ? '（空白間隔）' : `「${escapeHtml(tok.lyric)}」`;
+            const noteSummary = (tok.notes && tok.notes.length > 0)
+                ? tok.notes.map(n => `${n.accidental || ''}${n.pitch}${n.octave === 1 ? '˙' : n.octave === -1 ? '.' : ''}`).join(' ')
+                : '尚未標註簡譜';
+
+            statusEl.innerHTML = `
+                <span class="inline-block w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
+                <span>目前位置：P.${selectedPos.pageIdx + 1} 第 ${selectedPos.lineIdx + 1} 行 第 ${selectedPos.tokenIdx + 1} 字 ${lyricDisplay} ・ 簡譜：<strong class="text-slate-700">${escapeHtml(noteSummary)}</strong></span>
+            `;
+        }
+
+        function setInputMode(mode) {
+            inputMode = mode;
+            const overwriteBtn = document.getElementById('modeOverwriteBtn');
+            const appendBtn = document.getElementById('modeAppendBtn');
+            if (mode === 'overwrite') {
+                overwriteBtn.className = 'px-2 py-0.5 text-xs font-semibold rounded bg-white text-blue-600 shadow-2xs transition';
+                appendBtn.className = 'px-2 py-0.5 text-xs font-semibold rounded text-slate-600 hover:text-slate-900 transition';
+            } else {
+                appendBtn.className = 'px-2 py-0.5 text-xs font-semibold rounded bg-blue-600 text-white shadow-2xs transition';
+                overwriteBtn.className = 'px-2 py-0.5 text-xs font-semibold rounded text-slate-600 hover:text-slate-900 transition';
+            }
+        }
+
+        function toggleAutoAdvance() {
+            autoAdvance = !autoAdvance;
+            const indicator = document.getElementById('autoMoveIndicator');
+            if (indicator) {
+                indicator.textContent = autoAdvance ? '☑ 自動跳下一字' : '☐ 停留在原字';
+            }
+        }
+
+        // --- 可保持開啟/關閉的八度鎖定控制 ---
+        function toggleStickyOctave(octaveVal) {
+            activeOctave = (activeOctave === octaveVal) ? 0 : octaveVal;
+            applyModifiersToFocusedNoteIfAny();
+            updateModifierToolbarUI();
+        }
+
+        function setStickyOctave(octaveVal) {
+            activeOctave = octaveVal;
+            applyModifiersToFocusedNoteIfAny();
+            updateModifierToolbarUI();
+        }
+
+        // --- 可保持開啟/關閉的升降還原記號鎖定控制 ---
+        function toggleStickyAccidental(accChar) {
+            activeAccidental = (activeAccidental === accChar) ? '' : accChar;
+            applyModifiersToFocusedNoteIfAny();
+            updateModifierToolbarUI();
+        }
+
+        function clearStickyAccidental() {
+            activeAccidental = '';
+            activeOctave = 0;
+            const tok = getCurrentToken();
+            if (tok && tok.notes && tok.notes[selectedPos.noteIdx]) {
+                pushUndoSnapshot();
+                tok.notes[selectedPos.noteIdx].accidental = '';
+                tok.notes[selectedPos.noteIdx].octave = 0;
+                renderAll();
+            }
+            updateModifierToolbarUI();
+        }
+
+        function applyModifiersToFocusedNoteIfAny() {
+            const tok = getCurrentToken();
+            if (tok && tok.notes && tok.notes[selectedPos.noteIdx]) {
+                const targetNote = tok.notes[selectedPos.noteIdx];
+                if (targetNote.octave !== activeOctave || targetNote.accidental !== activeAccidental) {
+                    pushUndoSnapshot();
+                    targetNote.octave = activeOctave;
+                    targetNote.accidental = activeAccidental;
+                    renderAll();
+                }
+            }
+        }
+
+        function updateModifierToolbarUI() {
+            const activeClass = 'bg-blue-600 text-white border-blue-600 shadow-2xs';
+            const inactiveClass = 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300';
+
+            const octHighBtn = document.getElementById('octHighBtn');
+            const octMidBtn = document.getElementById('octMidBtn');
+            const octLowBtn = document.getElementById('octLowBtn');
+            if (octHighBtn) octHighBtn.className = `px-2 h-6 rounded border text-xs font-medium transition ${activeOctave === 1 ? activeClass : inactiveClass}`;
+            if (octMidBtn) octMidBtn.className = `px-2 h-6 rounded border text-xs font-medium transition ${activeOctave === 0 ? activeClass : inactiveClass}`;
+            if (octLowBtn) octLowBtn.className = `px-2 h-6 rounded border text-xs font-medium transition ${activeOctave === -1 ? activeClass : inactiveClass}`;
+
+            const accSharpBtn = document.getElementById('accSharpBtn');
+            const accFlatBtn = document.getElementById('accFlatBtn');
+            const accNaturalBtn = document.getElementById('accNaturalBtn');
+            if (accSharpBtn) accSharpBtn.className = `px-1.5 h-6 rounded border font-semibold text-xs transition ${activeAccidental === '♯' ? activeClass : inactiveClass}`;
+            if (accFlatBtn) accFlatBtn.className = `px-1.5 h-6 rounded border font-semibold text-xs transition ${activeAccidental === '♭' ? activeClass : inactiveClass}`;
+            if (accNaturalBtn) accNaturalBtn.className = `px-1.5 h-6 rounded border font-semibold text-xs transition ${activeAccidental === '♮' ? activeClass : inactiveClass}`;
+
+            const pill = document.getElementById('stickyModifierPill');
+            if (pill) {
+                const parts = [];
+                if (activeOctave === 1) parts.push('高八度 •');
+                else if (activeOctave === -1) parts.push('低八度 •');
+                else parts.push('中音');
+
+                if (activeAccidental === '♯') parts.push('♯升');
+                else if (activeAccidental === '♭') parts.push('♭降');
+                else if (activeAccidental === '♮') parts.push('♮還原');
+
+                const hasSpecial = activeOctave !== 0 || activeAccidental !== '';
+                pill.textContent = `預設記號：${parts.join(' + ')}`;
+                pill.className = hasSpecial
+                    ? 'ml-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-700 border border-blue-300'
+                    : 'ml-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-200/80 text-slate-600 border border-slate-300/70';
+            }
+        }
+
+        // --- 簡譜數字輸入、一字多音與刪除 ---
+        function inputNoteDigit(digit) {
+            const tok = getCurrentToken();
+            if (!tok) return;
+
+            pushUndoSnapshot();
+            const newNote = {
+                pitch: String(digit),
+                octave: activeOctave,
+                accidental: activeAccidental
+            };
+
+            if (tok.isSpace) {
+                tok.isSpace = false;
+            }
+            if (!Array.isArray(tok.notes)) {
+                tok.notes = [];
+            }
+
+            if (inputMode === 'append') {
+                if (tok.notes.length >= 4) {
+                    showToast('⚠️ 單一歌詞最多支援 4 個並列音符');
+                    tok.notes[tok.notes.length - 1] = newNote;
+                } else {
+                    tok.notes.push(newNote);
+                }
+                selectedPos.noteIdx = tok.notes.length - 1;
+                renderAll();
+            } else {
+                if (tok.notes.length > 1 && selectedPos.noteIdx < tok.notes.length) {
+                    tok.notes[selectedPos.noteIdx] = newNote;
+                } else {
+                    tok.notes = [newNote];
+                    selectedPos.noteIdx = 0;
+                }
+                renderAll();
+                if (autoAdvance) {
+                    navigateSelection(1, true);
+                }
+            }
+        }
+
+        function addExtraNoteSlot() {
+            const tok = getCurrentToken();
+            if (!tok) return;
+            if (!Array.isArray(tok.notes)) tok.notes = [];
+            if (tok.notes.length >= 4) {
+                showToast('⚠️ 單一歌詞最多支援 4 個並列音符');
+                return;
+            }
+            pushUndoSnapshot();
+            if (tok.isSpace) tok.isSpace = false;
+            const defaultPitch = tok.notes.length > 0 ? tok.notes[tok.notes.length - 1].pitch : '5';
+            tok.notes.push({
+                pitch: defaultPitch,
+                octave: activeOctave,
+                accidental: activeAccidental
+            });
+            selectedPos.noteIdx = tok.notes.length - 1;
+            renderAll();
+            showToast('➕ 已為目前歌詞新增同字音符，請直接按數字鍵修改音高', 1800);
+        }
+
+        function clearSelectedNote() {
+            const tok = getCurrentToken();
+            if (!tok || !tok.notes || tok.notes.length === 0) return;
+            pushUndoSnapshot();
+            if (tok.notes.length > 1) {
+                tok.notes.splice(selectedPos.noteIdx, 1);
+                selectedPos.noteIdx = Math.max(0, Math.min(selectedPos.noteIdx, tok.notes.length - 1));
+            } else {
+                tok.notes = [];
+                selectedPos.noteIdx = 0;
+                if (tok.lyric === ' ') tok.isSpace = true;
+            }
+            renderAll();
+        }
+
+        // --- 上下左右導覽 ---
+        function navigateVertical(direction) {
+            const song = getActiveSong();
+            if (!song) return;
+            let { pageIdx, lineIdx, tokenIdx } = selectedPos;
+            const page = song.pages[pageIdx];
+            if (!page) return;
+
+            let targetLineIdx = lineIdx + direction;
+            if (targetLineIdx < 0) {
+                if (pageIdx > 0) {
+                    pageIdx -= 1;
+                    targetLineIdx = song.pages[pageIdx].lines.length - 1;
+                } else {
+                    targetLineIdx = 0;
+                }
+            } else if (targetLineIdx >= page.lines.length) {
+                if (pageIdx < song.pages.length - 1) {
+                    pageIdx += 1;
+                    targetLineIdx = 0;
+                } else {
+                    targetLineIdx = page.lines.length - 1;
+                }
+            }
+
+            const targetLine = song.pages[pageIdx].lines[targetLineIdx];
+            const clampedTokenIdx = Math.max(0, Math.min(tokenIdx, targetLine.length - 1));
+            selectToken(pageIdx, targetLineIdx, clampedTokenIdx, 0);
+        }
+
+        function navigateSelection(step, skipNonLyrics = false) {
+            const song = getActiveSong();
+            if (!song) return;
+            let { pageIdx, lineIdx, tokenIdx } = selectedPos;
+
+            for (let safety = 0; safety < 500; safety++) {
+                const page = song.pages[pageIdx];
+                if (!page) break;
+                const line = page.lines[lineIdx];
+                if (!line) break;
+
+                tokenIdx += step;
+
+                if (tokenIdx >= line.length) {
+                    if (lineIdx + 1 < page.lines.length) {
+                        lineIdx += 1;
+                        tokenIdx = 0;
+                    } else if (!skipNonLyrics && pageIdx + 1 < song.pages.length) {
+                        pageIdx += 1;
+                        lineIdx = 0;
+                        tokenIdx = 0;
+                    } else {
+                        // 已達本頁最後一字，保持在原位
+                        return;
+                    }
+                } else if (tokenIdx < 0) {
+                    if (lineIdx - 1 >= 0) {
+                        lineIdx -= 1;
+                        tokenIdx = page.lines[lineIdx].length - 1;
+                    } else if (!skipNonLyrics && pageIdx - 1 >= 0) {
+                        pageIdx -= 1;
+                        lineIdx = song.pages[pageIdx].lines.length - 1;
+                        tokenIdx = song.pages[pageIdx].lines[lineIdx].length - 1;
+                    } else {
+                        return;
+                    }
+                }
+
+                const candidate = song.pages[pageIdx].lines[lineIdx][tokenIdx];
+                if (!skipNonLyrics) {
+                    selectToken(pageIdx, lineIdx, tokenIdx, 0);
+                    return;
+                }
+                if (candidate && !candidate.isSpace && !PUNCTUATION_REGEX.test(candidate.lyric)) {
+                    selectToken(pageIdx, lineIdx, tokenIdx, 0);
+                    return;
+                }
+            }
+        }
+
+        // =========================================================================
+        // 6. 全域鍵盤快捷鍵綁定
+        // =========================================================================
+        function bindKeyboardShortcuts() {
+            window.addEventListener('keydown', (e) => {
+                const lyricsModalOpen = !document.getElementById('lyricsModal').classList.contains('hidden');
+                const confirmModalOpen = !document.getElementById('confirmModal').classList.contains('hidden');
+                const promptModalOpen = !document.getElementById('promptModal').classList.contains('hidden');
+
+                if (e.key === 'Escape') {
+                    if (lyricsModalOpen) closeLyricsModal();
+                    if (confirmModalOpen) closeConfirmModal();
+                    if (promptModalOpen) closePromptModal();
+                    return;
+                }
+
+                if (lyricsModalOpen || confirmModalOpen || promptModalOpen) return;
+
+                const activeTag = document.activeElement ? document.activeElement.tagName : '';
+                if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') return;
+
+                // 上一步 / 下一步
+                if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+                    const k = e.key.toLowerCase();
+                    if (k === 'z' && !e.shiftKey) {
+                        e.preventDefault();
+                        undoAction();
+                        return;
+                    }
+                    if (k === 'y' || (k === 'z' && e.shiftKey)) {
+                        e.preventDefault();
+                        redoAction();
+                        return;
+                    }
+                    return;
+                }
+
+                // 簡譜音符數字 1-7, 0, -
+                if (['1', '2', '3', '4', '5', '6', '7', '0', '-'].includes(e.key)) {
+                    e.preventDefault();
+                    inputNoteDigit(e.key);
+                    return;
+                }
+
+                // 同字新增音符 +
+                if (e.key === '+' || e.key === '=') {
+                    e.preventDefault();
+                    addExtraNoteSlot();
+                    return;
+                }
+
+                // 八度鎖定切換 Q / W / A
+                if (e.key === 'q' || e.key === 'Q') {
+                    e.preventDefault();
+                    toggleStickyOctave(1);
+                    return;
+                }
+                if (e.key === 'w' || e.key === 'W') {
+                    e.preventDefault();
+                    setStickyOctave(0);
+                    return;
+                }
+                if (e.key === 'a' || e.key === 'A') {
+                    e.preventDefault();
+                    toggleStickyOctave(-1);
+                    return;
+                }
+
+                // 升降還原記號鎖定切換 # / b / n
+                if (e.key === '#') {
+                    e.preventDefault();
+                    toggleStickyAccidental('♯');
+                    return;
+                }
+                if (e.key === 'b' || e.key === 'B') {
+                    e.preventDefault();
+                    toggleStickyAccidental('♭');
+                    return;
+                }
+                if (e.key === 'n' || e.key === 'N') {
+                    e.preventDefault();
+                    toggleStickyAccidental('♮');
+                    return;
+                }
+
+                // 刪除音符
+                if (e.key === 'Backspace' || e.key === 'Delete') {
+                    e.preventDefault();
+                    clearSelectedNote();
+                    return;
+                }
+
+                // 方向鍵移動游標
+                if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    navigateSelection(-1, false);
+                } else if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    navigateSelection(1, false);
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    navigateVertical(-1);
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    navigateVertical(1);
+                }
+            });
+        }
+
+        function updateFontSize() {
+            const size = parseInt(document.getElementById('fontSizeSlider').value, 10) || 20;
+            document.getElementById('fontSizeLabel').textContent = `${size}px`;
+            document.documentElement.style.setProperty('--lyric-size', `${size}px`);
+            document.documentElement.style.setProperty('--row-scale', (size / 19.5).toFixed(3));
+        }
+
+        // =========================================================================
+        // 匯出模式 1 (首要推薦)：PptxGenJS 原生可編輯 .pptx 匯出
+        // - 16:9 寬螢幕 (10" x 5.625")，每頁段落自動產生一張投影片
+        // - 每行歌詞為獨立無框線、無底色原生表格 (border: none, fill: none, margin: 0)
+        // - 四層緊湊結構 (高八度點、升降+數字、低八度點、歌詞 colspan)
+        // - 超寬或超多行自動等比例縮放，確保 100% 落在投影片範圍內
+        // =========================================================================
+        async function exportToPPTX(pageIdx = null) {
+            if (typeof PptxGenJS === 'undefined') {
+                showToast('⚠️ 無法載入 PPTX 產生元件（請檢查網路連線），請改用「複製 Word/PPT」或「複製圖片」功能。', 5000);
+                return;
+            }
+
+            const song = getActiveSong();
+            if (!song) return;
+
+            const targetPages = (pageIdx !== null && song.pages[pageIdx])
+                ? [song.pages[pageIdx]]
+                : song.pages;
+
+            try {
+                const pptx = new PptxGenJS();
+                pptx.layout = 'LAYOUT_16x9'; // 10.0 x 5.625 inches
+                pptx.title = song.title;
+
+                const SLIDE_W = 10.0;
+                const SLIDE_H = 5.625;
+                const MAX_CONTENT_W = 9.2;
+                const MAX_CONTENT_H = 5.0;
+                const FONT_ZH = 'Microsoft JhengHei';
+                const FONT_NUM = 'Arial';
+
+                targetPages.forEach((page) => {
+                    const slide = pptx.addSlide();
+                    slide.background = { color: 'FFFFFF' };
+
+                    const lineCount = page.lines.length;
+                    if (lineCount === 0) return;
+
+                    // 計算原始垂直總高度，若超過 5.0 吋則等比例微縮
+                    const baseRowH = [0.13, 0.28, 0.13, 0.44]; // 單行總高 = 0.98"
+                    const baseLineGap = 0.22;
+                    const singleLineTotalH = baseRowH.reduce((a, b) => a + b, 0);
+                    const rawTotalH = lineCount * singleLineTotalH + Math.max(0, lineCount - 1) * baseLineGap;
+                    const vScale = rawTotalH > MAX_CONTENT_H ? (MAX_CONTENT_H / rawTotalH) : 1.0;
+
+                    const scaledRowH = baseRowH.map(h => +(h * vScale).toFixed(3));
+                    const scaledLineGap = +(baseLineGap * vScale).toFixed(3);
+                    const scaledSingleLineH = scaledRowH.reduce((a, b) => a + b, 0);
+                    const finalTotalH = lineCount * scaledSingleLineH + Math.max(0, lineCount - 1) * scaledLineGap;
+
+                    let cursorY = Math.max(0.28, (SLIDE_H - finalTotalH) / 2);
+
+                    page.lines.forEach((line) => {
+                        // 1. 計算每個欄位寬度 (colW)
+                        const colWidths = [];
+                        line.forEach((tok) => {
+                            if (tok.isSpace && (!tok.notes || tok.notes.length === 0)) {
+                                colWidths.push(0.24);
+                            } else {
+                                const nLen = tok.notes ? tok.notes.length : 0;
+                                if (nLen <= 1) {
+                                    colWidths.push(0.42);
+                                } else if (nLen === 2) {
+                                    colWidths.push(0.26, 0.26);
+                                } else if (nLen === 3) {
+                                    colWidths.push(0.22, 0.22, 0.22);
+                                } else {
+                                    for (let k = 0; k < nLen; k++) colWidths.push(0.20);
+                                }
+                            }
+                        });
+
+                        const rawLineW = colWidths.reduce((a, b) => a + b, 0);
+                        const hScale = rawLineW > MAX_CONTENT_W ? (MAX_CONTENT_W / rawLineW) : 1.0;
+                        const finalScale = Math.min(vScale, hScale);
+                        const finalColW = colWidths.map(w => +(w * hScale).toFixed(3));
+                        const finalLineW = finalColW.reduce((a, b) => a + b, 0);
+
+                        // 依縮放比例計算字級
+                        const dotFontSize = Math.max(7, Math.round(9 * finalScale));
+                        const noteFontSizeSingle = Math.max(12, Math.round(18 * finalScale));
+                        const noteFontSizeMulti = Math.max(10, Math.round(15 * finalScale));
+                        const lyricFontSize = Math.max(14, Math.round(24 * finalScale));
+
+                        const noStyle = {
+                            border: { type: 'none' },
+                            fill: { type: 'none' },
+                            margin: 0
+                        };
+
+                        const rowHighDots = [];
+                        const rowNotes = [];
+                        const rowLowDots = [];
+                        const rowLyrics = [];
+
+                        line.forEach((tok) => {
+                            if (tok.isSpace && (!tok.notes || tok.notes.length === 0)) {
+                                rowHighDots.push({ text: '', options: { ...noStyle } });
+                                rowNotes.push({ text: '', options: { ...noStyle } });
+                                rowLowDots.push({ text: '', options: { ...noStyle } });
+                                rowLyrics.push({ text: '', options: { ...noStyle } });
+                                return;
+                            }
+
+                            const notes = tok.notes || [];
+                            const spanCount = Math.max(1, notes.length);
+                            const isMulti = notes.length > 1;
+                            const activeNoteSize = isMulti ? noteFontSizeMulti : noteFontSizeSingle;
+
+                            if (notes.length === 0) {
+                                rowHighDots.push({ text: '', options: { ...noStyle } });
+                                rowNotes.push({ text: '', options: { ...noStyle } });
+                                rowLowDots.push({ text: '', options: { ...noStyle } });
+                            } else {
+                                notes.forEach((n) => {
+                                    // Row 1: 高八度點
+                                    const topDotText = n.octave >= 2 ? '••' : (n.octave >= 1 ? '•' : '');
+                                    rowHighDots.push({
+                                        text: topDotText,
+                                        options: {
+                                            ...noStyle,
+                                            fontFace: FONT_NUM,
+                                            fontSize: dotFontSize,
+                                            bold: true,
+                                            color: '000000',
+                                            align: 'center',
+                                            valign: 'bottom'
+                                        }
+                                    });
+
+                                    // Row 2: 升降記號 (上標) + 簡譜數字
+                                    const noteRuns = [];
+                                    if (n.accidental) {
+                                        noteRuns.push({
+                                            text: n.accidental,
+                                            options: {
+                                                fontFace: FONT_NUM,
+                                                fontSize: Math.max(8, Math.round(activeNoteSize * 0.68)),
+                                                bold: true,
+                                                superscript: true,
+                                                color: '000000'
+                                            }
+                                        });
+                                    }
+                                    noteRuns.push({
+                                        text: n.pitch,
+                                        options: {
+                                            fontFace: FONT_NUM,
+                                            fontSize: activeNoteSize,
+                                            bold: true,
+                                            color: '000000'
+                                        }
+                                    });
+
+                                    rowNotes.push({
+                                        text: noteRuns,
+                                        options: {
+                                            ...noStyle,
+                                            align: 'center',
+                                            valign: 'middle'
+                                        }
+                                    });
+
+                                    // Row 3: 低八度點
+                                    const botDotText = n.octave <= -2 ? '••' : (n.octave <= -1 ? '•' : '');
+                                    rowLowDots.push({
+                                        text: botDotText,
+                                        options: {
+                                            ...noStyle,
+                                            fontFace: FONT_NUM,
+                                            fontSize: dotFontSize,
+                                            bold: true,
+                                            color: '000000',
+                                            align: 'center',
+                                            valign: 'top'
+                                        }
+                                    });
+                                });
+                            }
+
+                            // Row 4: 歌詞單字 (多音時使用 colspan 精準置中於上方所有音符正下方)
+                            const lyricOpts = {
+                                ...noStyle,
+                                fontFace: FONT_ZH,
+                                fontSize: lyricFontSize,
+                                color: '000000',
+                                align: 'center',
+                                valign: 'top'
+                            };
+                            if (spanCount > 1) lyricOpts.colspan = spanCount;
+
+                            rowLyrics.push({
+                                text: tok.lyric,
+                                options: lyricOpts
+                            });
+                        });
+
+                        const tableX = Math.max(0.4, (SLIDE_W - finalLineW) / 2);
+
+                        slide.addTable([rowHighDots, rowNotes, rowLowDots, rowLyrics], {
+                            x: tableX,
+                            y: cursorY,
+                            w: finalLineW,
+                            colW: finalColW,
+                            rowH: scaledRowH,
+                            border: { type: 'none' },
+                            fill: { type: 'none' },
+                            margin: 0
+                        });
+
+                        cursorY += scaledSingleLineH + scaledLineGap;
+                    });
+                });
+
+                const suffix = pageIdx !== null ? `_第${pageIdx + 1}頁` : '';
+                const safeName = (song.title || '簡譜歌詞').replace(/[\\/:*?"<>|]/g, '_');
+                await pptx.writeFile({ fileName: `${safeName}${suffix}.pptx` });
+                showToast(`🎉 已匯出原生簡報「${safeName}${suffix}.pptx」！打開即可自由編輯且零底色跑版。`, 4500);
+            } catch (err) {
+                console.error('PPTX 匯出錯誤:', err);
+                showToast('❌ PPTX 匯出失敗，請稍後再試或改用「複製圖片」。', 4000);
+            }
+        }
+
+        // =========================================================================
+        // 匯出模式 2：嚴格單一矩形 <table> 剪貼簿複製 (修復 PPT 多表格被壓扁問題)
+        // - 整頁內容嚴格合併為「唯一一個 <table>」，避免 PowerPoint 降級為純文字
+        // - 計算全頁最大欄數 maxCols，較短行自動於右側補齊空儲存格
+        // - 每個儲存格明確宣告 border:none; background-color:transparent; padding:0;
+        // =========================================================================
+        function buildSingleTableHTMLForOffice(page) {
+            // 計算每一行展開後的子欄數
+            function getLineSubColCount(line) {
+                let count = 0;
+                line.forEach(tok => {
+                    if (tok.isSpace && (!tok.notes || tok.notes.length === 0)) {
+                        count += 1;
+                    } else {
+                        count += Math.max(1, tok.notes ? tok.notes.length : 0);
+                    }
+                });
+                return count;
+            }
+
+            let maxCols = 1;
+            page.lines.forEach(line => {
+                maxCols = Math.max(maxCols, getLineSubColCount(line));
+            });
+
+            const tdBase = 'border:none; background-color:transparent; padding:0; margin:0; text-align:center; mso-line-height-rule:exactly;';
+            let rowsHtml = '';
+
+            page.lines.forEach((line, lIdx) => {
+                const lineCols = getLineSubColCount(line);
+                const padCols = maxCols - lineCols;
+
+                let rHigh = '';
+                let rNote = '';
+                let rLow = '';
+                let rLyric = '';
+
+                line.forEach(tok => {
+                    if (tok.isSpace && (!tok.notes || tok.notes.length === 0)) {
+                        const spStyle = `${tdBase} width:14pt;`;
+                        rHigh += `<td style="${spStyle} height:9pt; line-height:9pt; font-size:8pt;">&nbsp;</td>`;
+                        rNote += `<td style="${spStyle} height:18pt; line-height:18pt; font-size:14pt;">&nbsp;</td>`;
+                        rLow += `<td style="${spStyle} height:9pt; line-height:9pt; font-size:8pt;">&nbsp;</td>`;
+                        rLyric += `<td style="${spStyle} height:24pt; line-height:24pt; font-size:18pt;">&nbsp;</td>`;
+                        return;
+                    }
+
+                    const notes = tok.notes || [];
+                    const span = Math.max(1, notes.length);
+                    const isMulti = notes.length > 1;
+                    const colWidthPt = isMulti ? 15 : 24;
+
+                    if (notes.length === 0) {
+                        rHigh += `<td style="${tdBase} width:${colWidthPt}pt; height:9pt; line-height:9pt; font-size:8pt;"></td>`;
+                        rNote += `<td style="${tdBase} width:${colWidthPt}pt; height:18pt; line-height:18pt; font-size:14pt;">&nbsp;</td>`;
+                        rLow += `<td style="${tdBase} width:${colWidthPt}pt; height:9pt; line-height:9pt; font-size:8pt;"></td>`;
+                    } else {
+                        notes.forEach(n => {
+                            const topDot = n.octave >= 2 ? '••' : (n.octave >= 1 ? '•' : '');
+                            const botDot = n.octave <= -2 ? '••' : (n.octave <= -1 ? '•' : '');
+                            const notePt = isMulti ? 12 : 14;
+                            const accHtml = n.accidental
+                                ? `<sup style="font-size:${Math.max(8, notePt - 4)}pt; font-weight:bold;">${n.accidental}</sup>`
+                                : '';
+
+                            rHigh += `<td style="${tdBase} width:${colWidthPt}pt; height:9pt; line-height:9pt; vertical-align:bottom; font-family:Arial,sans-serif; font-size:8pt; font-weight:bold; color:#000000;">${topDot}</td>`;
+                            rNote += `<td style="${tdBase} width:${colWidthPt}pt; height:18pt; line-height:18pt; vertical-align:middle; font-family:Arial,sans-serif; font-size:${notePt}pt; font-weight:bold; color:#000000; white-space:nowrap;">${accHtml}${n.pitch}</td>`;
+                            rLow += `<td style="${tdBase} width:${colWidthPt}pt; height:9pt; line-height:9pt; vertical-align:top; font-family:Arial,sans-serif; font-size:8pt; font-weight:bold; color:#000000;">${botDot}</td>`;
+                        });
+                    }
+
+                    const colspanAttr = span > 1 ? ` colspan="${span}"` : '';
+                    rLyric += `<td${colspanAttr} style="${tdBase} height:24pt; line-height:24pt; vertical-align:top; font-family:'Microsoft JhengHei','Noto Sans TC',sans-serif; font-size:18pt; color:#000000; white-space:nowrap;">${escapeHtml(tok.lyric)}</td>`;
+                });
+
+                // 右側補齊空儲存格以維持嚴格矩形結構
+                if (padCols > 0) {
+                    const padTd = `<td colspan="${padCols}" style="${tdBase}"></td>`;
+                    rHigh += padTd;
+                    rNote += padTd;
+                    rLow += padTd;
+                    rLyric += padTd;
+                }
+
+                rowsHtml += `<tr style="border:none; background-color:transparent;">${rHigh}</tr>`;
+                rowsHtml += `<tr style="border:none; background-color:transparent;">${rNote}</tr>`;
+                rowsHtml += `<tr style="border:none; background-color:transparent;">${rLow}</tr>`;
+                rowsHtml += `<tr style="border:none; background-color:transparent;">${rLyric}</tr>`;
+
+                // 行與行之間的空白間距列
+                if (lIdx < page.lines.length - 1) {
+                    rowsHtml += `<tr style="border:none; background-color:transparent;"><td colspan="${maxCols}" style="height:14pt; line-height:14pt; border:none; background-color:transparent; padding:0; margin:0;">&nbsp;</td></tr>`;
+                }
+            });
+
+            return `<table border="0" cellspacing="0" cellpadding="0" style="border:none; border-collapse:collapse; background-color:transparent; padding:0; margin:0; mso-table-lspace:0pt; mso-table-rspace:0pt;"><tbody>${rowsHtml}</tbody></table>`;
+        }
+
+        async function copySingleTableForOffice(pIdx) {
+            const song = getActiveSong();
+            if (!song || !song.pages[pIdx]) return;
+            const page = song.pages[pIdx];
+
+            const htmlTable = buildSingleTableHTMLForOffice(page);
+            const plainText = generatePlainTextFallback(page);
+            const toastMsg = '已複製！貼入 PPT 時請點擊「投影片空白處」再按 Ctrl+V（勿點進文字框內），或使用「匯出 PPTX」獲得原生可編輯投影片。';
+
+            try {
+                if (navigator.clipboard && window.ClipboardItem) {
+                    const htmlBlob = new Blob([htmlTable], { type: 'text/html' });
+                    const textBlob = new Blob([plainText], { type: 'text/plain' });
+                    await navigator.clipboard.write([
+                        new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': textBlob })
+                    ]);
+                    showToast(toastMsg, 5500);
+                } else {
+                    fallbackCopyHTML(htmlTable);
+                    showToast(toastMsg, 5500);
+                }
+            } catch (err) {
+                fallbackCopyHTML(htmlTable);
+                showToast(toastMsg, 5500);
+            }
+        }
+
+        function fallbackCopyHTML(html) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            tempDiv.style.position = 'fixed';
+            tempDiv.style.left = '-9999px';
+            document.body.appendChild(tempDiv);
+            const range = document.createRange();
+            range.selectNodeContents(tempDiv);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            document.execCommand('copy');
+            document.body.removeChild(tempDiv);
+        }
+
+        function generatePlainTextFallback(page) {
+            return page.lines.map(line => {
+                let top = '';
+                let bottom = '';
+                line.forEach(tok => {
+                    if (tok.isSpace && (!tok.notes || tok.notes.length === 0)) {
+                        top += '  ';
+                        bottom += '  ';
+                        return;
+                    }
+                    const noteStr = (tok.notes || []).map(n => n.accidental + n.pitch).join('');
+                    const pad = Math.max(0, tok.lyric.length * 2 - noteStr.length);
+                    top += noteStr + ' '.repeat(pad + 1);
+                    bottom += tok.lyric + ' ';
+                });
+                return `${top}\n${bottom}`;
+            }).join('\n\n');
+        }
+
+        // =========================================================================
+        // 匯出模式 3：3x DPR 高解析度 Canvas 透明背景 PNG 複製與下載
+        // =========================================================================
+        function renderPageToHighDPICanvas(page) {
+            const canvas = document.getElementById('exportCanvas');
+            const ctx = canvas.getContext('2d');
+            const dpr = 3; // 3x 超高解析度，貼進 PPT 放大依然銳利
+
+            const sliderVal = parseInt(document.getElementById('fontSizeSlider').value, 10) || 18;
+            const baseFontSize = Math.max(22, Math.round(sliderVal * 1.25));
+            const paddingX = 44;
+            const paddingY = 38;
+            const lineHeight = baseFontSize * 2.65;
+            const spaceW = baseFontSize * 0.65;
+
+            ctx.font = `400 ${baseFontSize}px "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
+
+            // 測量每一行寬度
+            function getTokenCellWidth(tok) {
+                if (tok.isSpace && (!tok.notes || tok.notes.length === 0)) return spaceW;
+                const lyricW = ctx.measureText(tok.lyric).width;
+                const nLen = tok.notes ? tok.notes.length : 0;
+                const minByNotes = nLen > 1 ? nLen * (baseFontSize * 0.62) : baseFontSize * 1.25;
+                return Math.max(lyricW + 6, minByNotes);
+            }
+
+            let maxLineWidth = 240;
+            page.lines.forEach(line => {
+                const w = line.reduce((acc, tok) => acc + getTokenCellWidth(tok), 0);
+                maxLineWidth = Math.max(maxLineWidth, w);
+            });
+
+            const totalW = paddingX * 2 + maxLineWidth;
+            const totalH = paddingY * 2 + page.lines.length * lineHeight;
+
+            canvas.width = Math.ceil(totalW * dpr);
+            canvas.height = Math.ceil(totalH * dpr);
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            const isTransparent = document.getElementById('transparentBgCheckbox').checked;
+            ctx.clearRect(0, 0, totalW, totalH);
+            if (!isTransparent) {
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, totalW, totalH);
+            }
+
+            ctx.fillStyle = '#000000';
+            ctx.textBaseline = 'alphabetic';
+
+            page.lines.forEach((line, lIdx) => {
+                let cursorX = paddingX;
+                const lyricY = paddingY + (lIdx + 1) * lineHeight - baseFontSize * 0.35;
+                const noteY = lyricY - baseFontSize * 1.12;
+
+                line.forEach(tok => {
+                    const cellW = getTokenCellWidth(tok);
+                    if (tok.isSpace && (!tok.notes || tok.notes.length === 0)) {
+                        cursorX += cellW;
+                        return;
+                    }
+
+                    const centerX = cursorX + cellW / 2;
+
+                    // 繪製下方歌詞
+                    ctx.font = `400 ${baseFontSize}px "Noto Sans TC", "Microsoft JhengHei", sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.fillText(tok.lyric, centerX, lyricY);
+
+                    // 繪製上方簡譜音符 (每個音符皆獨立對齊自己的八度點與升降記號)
+                    const notes = tok.notes || [];
+                    const nLen = notes.length;
+                    if (nLen > 0) {
+                        const noteScale = nLen === 1 ? 0.9 : (nLen === 2 ? 0.76 : (nLen === 3 ? 0.68 : 0.62));
+                        const noteSize = baseFontSize * noteScale;
+                        const subSlotW = cellW / nLen;
+
+                        notes.forEach((note, nIdx) => {
+                            const slotCenterX = cursorX + subSlotW * (nIdx + 0.5);
+                            const digitX = slotCenterX + (note.accidental ? noteSize * 0.14 : 0);
+
+                            // 簡譜數字
+                            ctx.font = `700 ${noteSize}px "Inter", Arial, sans-serif`;
+                            ctx.textAlign = 'center';
+                            ctx.fillText(note.pitch, digitX, noteY);
+
+                            // 左上角升降還原記號
+                            if (note.accidental) {
+                                const accSize = noteSize * 0.62;
+                                ctx.font = `700 ${accSize}px "Inter", Arial, sans-serif`;
+                                ctx.fillText(note.accidental, digitX - noteSize * 0.44, noteY - noteSize * 0.38);
+                            }
+
+                            const dotRadius = Math.max(1.8, noteSize * 0.1);
+
+                            // 高八度點 (正上方緊貼)
+                            if (note.octave >= 1) {
+                                ctx.beginPath();
+                                ctx.arc(digitX, noteY - noteSize * 0.84, dotRadius, 0, Math.PI * 2);
+                                ctx.fill();
+                                if (note.octave >= 2) {
+                                    ctx.beginPath();
+                                    ctx.arc(digitX, noteY - noteSize * 1.12, dotRadius, 0, Math.PI * 2);
+                                    ctx.fill();
+                                }
+                            }
+
+                            // 低八度點 (正下方緊貼)
+                            if (note.octave <= -1) {
+                                ctx.beginPath();
+                                ctx.arc(digitX, noteY + noteSize * 0.22, dotRadius, 0, Math.PI * 2);
+                                ctx.fill();
+                                if (note.octave <= -2) {
+                                    ctx.beginPath();
+                                    ctx.arc(digitX, noteY + noteSize * 0.50, dotRadius, 0, Math.PI * 2);
+                                    ctx.fill();
+                                }
+                            }
+                        });
+                    }
+
+                    cursorX += cellW;
+                });
+            });
+
+            return canvas;
+        }
+
+        async function copyPageAsImage(pIdx) {
+            const song = getActiveSong();
+            if (!song || !song.pages[pIdx]) return;
+            const canvas = renderPageToHighDPICanvas(song.pages[pIdx]);
+
+            canvas.toBlob(async (blob) => {
+                try {
+                    if (navigator.clipboard && window.ClipboardItem) {
+                        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+                        showToast(`🖼️ 已複製第 ${pIdx + 1} 頁高解析圖片（${document.getElementById('transparentBgCheckbox').checked ? '透明底' : '白底'}）！可直接在 PPT 貼上。`);
+                    } else {
+                        downloadPageAsPNG(pIdx);
+                        showToast('⚠️ 瀏覽器不支援剪貼簿圖片寫入，已自動為您下載 PNG 圖檔。');
+                    }
+                } catch (err) {
+                    downloadPageAsPNG(pIdx);
+                    showToast('⚠️ 剪貼簿權限受限，已自動為您下載 PNG 圖檔。');
+                }
+            }, 'image/png');
+        }
+
+        function downloadPageAsPNG(pIdx) {
+            const song = getActiveSong();
+            if (!song || !song.pages[pIdx]) return;
+            const page = song.pages[pIdx];
+            const canvas = renderPageToHighDPICanvas(page);
+            const link = document.createElement('a');
+            const safeTitle = `${song.title}_P${pIdx + 1}`.replace(/[\\/:*?"<>|]/g, '_');
+            link.download = `${safeTitle}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            showToast(`📥 已下載 3x 高解析圖檔「${safeTitle}.png」`);
+        }
+
+        // =========================================================================
+        // 5. JSON 備份匯出與匯入、自訂 Modal 與 Toast 工具
+        // =========================================================================
+        function exportAllSongsJSON() {
+            const blob = new Blob([JSON.stringify(appState, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `簡譜歌詞庫備份_${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('💾 已匯出所有歌曲備份 (.json)');
+        }
+
+        function importAllSongsJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    if (parsed && Array.isArray(parsed.songs) && parsed.songs.length > 0) {
+                        pushUndoSnapshot();
+                        appState = parsed;
+                        selectedPos = { pageIdx: 0, lineIdx: 0, tokenIdx: 0, noteIdx: 0 };
+                        renderAll();
+                        showToast(`📂 已成功匯入 ${parsed.songs.length} 首歌曲！`);
+                    } else {
+                        showToast('❌ 備份檔格式不正確');
+                    }
+                } catch (err) {
+                    showToast('❌ 無法讀取該 JSON 檔案');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        function openConfirmModal(title, message, onConfirm) {
+            document.getElementById('confirmModalTitle').textContent = title;
+            document.getElementById('confirmModalMessage').textContent = message;
+            const okBtn = document.getElementById('confirmModalOkBtn');
+            okBtn.onclick = () => {
+                closeConfirmModal();
+                onConfirm();
+            };
+            const modal = document.getElementById('confirmModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeConfirmModal() {
+            const modal = document.getElementById('confirmModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function openPromptModal(title, defaultValue, onSubmit) {
+            document.getElementById('promptModalTitle').textContent = title;
+            const input = document.getElementById('promptModalInput');
+            input.value = defaultValue || '';
+
+            const submitHandler = () => {
+                const val = input.value;
+                closePromptModal();
+                onSubmit(val);
+            };
+
+            const okBtn = document.getElementById('promptModalOkBtn');
+            okBtn.onclick = submitHandler;
+            input.onkeydown = (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    submitHandler();
+                }
+            };
+
+            const modal = document.getElementById('promptModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => {
+                input.focus();
+                input.select();
+            }, 30);
+        }
+
+        function closePromptModal() {
+            const modal = document.getElementById('promptModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function showToast(message, duration = 3200) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'bg-slate-800/95 text-white text-xs font-medium px-4 py-3 rounded-xl shadow-xl border border-slate-700 leading-relaxed transition-all duration-300 opacity-0 translate-y-2';
+            toast.textContent = message;
+            container.appendChild(toast);
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('opacity-0', 'translate-y-2');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+    </script>
+</body>
+</html>
